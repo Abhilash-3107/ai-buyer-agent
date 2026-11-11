@@ -1,0 +1,88 @@
+"""Baselines through the real pipeline, and the report writer driven by the scripted fake model (no real LLM)."""
+import json
+
+import pytest
+from scripted import call, reply, scripted_llm, submit
+
+from app import evaluate as evaluate_module
+from app import runs
+from app.baselines import BaselineClient
+from app.evaluate import evaluate, main, write_eval
+from app.scenarios import SCENARIOS
+from app.scoring import CHECK_NAMES
+
+S1 = {"sku": "SKU-1002", "supplier_id": "SUP-METRO", "daily_demand": 40, "reason": "r"}
+
+
+@pytest.fixture(autouse=True)
+def runs_in_tmp(tmp_path, monkeypatch):
+    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
+
+
+def baseline_cards(name):
+    return evaluate(name, lambda: BaselineClient(name), list(SCENARIOS), 1, log=lambda m: None)
+
+
+def test_do_nothing_passes_exactly_the_scenarios_that_expect_no_action_and_a_reject():
+    passed = {c.scenario_id for c in baseline_cards("do_nothing") if c.passed}
+    wanted = {s.id for s in SCENARIOS.values()
+              if s.expected.decision == "REJECT" and s.expected.new_buy_qty == (0, 0) and s.expected.escalation is None}
+    assert passed == wanted and passed
+
+
+def test_rubber_stamp_runs_everything_and_fails_s1_modify():
+    cards = {c.scenario_id: c for c in baseline_cards("rubber_stamp")}
+    assert set(cards) == set(SCENARIOS) and all(c.outcome == "DECIDED" for c in cards.values())
+    assert not cards["S1-MODIFY"].passed and cards["S1-MODIFY"].new_buy_units == 0  # the engine's 800 is blocked
+    assert sum(c.passed for c in cards.values()) < len(cards) // 2
+
+
+def scripted_client_factory():
+    scripts = {"good": [reply(call("get_suppliers", {"sku": "SKU-1002"}), call("get_budget", {"sku": "SKU-1002"}),
+                                call("get_storage", {"sku": "SKU-1002"})),
+                        reply(call("create_po", {**S1, "qty": 192})), reply(submit("MODIFY", 192))],
+               "bad": [reply(submit("REJECT", 0, demand=None)), reply(submit("REJECT", 0, demand=None))]}
+    order = iter(["good", "bad"])
+    return lambda: scripted_llm(scripts[next(order)])
+
+
+def test_report_has_every_check_and_a_failure_reason(tmp_path):
+    cards = evaluate("scripted", scripted_client_factory(), ["S1-MODIFY", "S1-ACCEPT"], 1, log=lambda m: None)
+    write_eval(tmp_path, "scripted", "model", cards, 1, 0.0)
+
+    data = json.loads((tmp_path / "scripted.json").read_text(), parse_constant=lambda c: pytest.fail(f"non-strict {c}"))
+    assert [c["scenario_id"] for c in data["cards"]] == ["S1-MODIFY", "S1-ACCEPT"]
+    assert [c["passed"] for c in data["cards"]] == [True, False]
+    report = (tmp_path / "scripted.md").read_text()
+    assert all(name in report for name in CHECK_NAMES)
+    assert "## Why it failed" in report and "decided REJECT, expected ACCEPT" in report and data["cards"][1]["run_id"] in report
+    assert "\u2013" not in report and "\u2014" not in report
+
+
+def test_cli_baseline_then_compare(tmp_path):
+    for name in ("rubber_stamp", "do_nothing"):
+        assert main(["--baseline", name, "--scenarios", "S1-REJECT,S1-MODIFY", "--out", str(tmp_path)]) == 0
+    assert main(["--compare", *map(str, tmp_path.glob("*.json")), "--out", str(tmp_path)]) == 0
+    table = (tmp_path / "README.md").read_text()
+    assert "do_nothing" in table and "rubber_stamp" in table and "S1-REJECT" in table
+
+
+def test_report_lists_the_categories_the_agent_read_itself(tmp_path):
+    cards = evaluate("scripted", scripted_client_factory(), ["S1-MODIFY", "S1-ACCEPT"], 1, log=lambda m: None)
+    write_eval(tmp_path, "scripted", "model", cards, 1, 0.0)
+    report = (tmp_path / "scripted.md").read_text()
+    assert "Read by agent" in report and "| budget, storage, suppliers |" in report and "| none |" in report
+
+
+def test_results_are_written_after_every_finished_run(tmp_path, monkeypatch):
+    seen = []
+    real = evaluate_module.write_eval
+
+    def spy(out, *args):
+        real(out, *args)
+        seen.append(len(json.loads((out / "do_nothing.json").read_text())["cards"]))
+        assert (out / "do_nothing.md").exists() and not list(out.glob("*.tmp"))
+
+    monkeypatch.setattr(evaluate_module, "write_eval", spy)
+    assert main(["--baseline", "do_nothing", "--scenarios", "S1-REJECT,S1-MODIFY", "--repeats", "2", "--out", str(tmp_path)]) == 0
+    assert seen == [1, 2, 3, 4]
