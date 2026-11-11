@@ -115,7 +115,7 @@ def _recover_call(text: str | None, turn: int) -> tuple[ToolCall | None, bool]:
 
 
 def _preload(session: ToolSession, trace: Trace, scenario_trigger: dict) -> dict:
-    """Read what needs no judgement (the trigger's details and the core product facts) before the first model call."""
+    """Read what needs no judgement (the trigger's details, the product facts, suppliers, budget and storage) before the first model call."""
     conn, run = session.conn, session.run
 
     def read(name: str, args: dict) -> dict:

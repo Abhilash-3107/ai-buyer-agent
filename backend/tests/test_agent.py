@@ -26,8 +26,6 @@ def escalations(result):
 
 def test_s1_modify_happy_path():
     script = [
-        reply(call("get_suppliers", {"sku": "SKU-1002"}), call("get_budget", {"sku": "SKU-1002"}),
-              call("get_storage", {"sku": "SKU-1002"})),
         reply(call("plan_order", {"sku": "SKU-1002", "supplier_id": "SUP-METRO", "daily_demand": 40})),
         reply(call("create_po", {**S1, "qty": 800})),
         reply(call("create_po", {**S1, "qty": 192})),
@@ -36,17 +34,17 @@ def test_s1_modify_happy_path():
     result, events = run(script)
 
     assert result.outcome == "DECIDED" and result.verification.passed and result.decision.decision == "MODIFY"
-    assert result.steps == 5 and (result.tokens_in, result.tokens_out) == (500, 50)
-    # the code preloads the trigger and the core snapshot before the first model call
+    assert result.steps == 4 and (result.tokens_in, result.tokens_out) == (400, 40)
+    # the code preloads the trigger, the core snapshot, suppliers, budget and storage before the first model call
     system_calls = [e.data["name"] for e in events if e.type == "tool_call" and e.data["by"] == "system"]
     assert system_calls == ["get_recommendation", "get_product", "get_inventory", "get_purchase_orders",
-                            "get_forecast", "get_sales_history"]
+                            "get_forecast", "get_sales_history", "get_suppliers", "get_budget",
+                            "get_storage"]
     assert all(e.turn == 0 for e in events if e.data.get("by") == "system")
     agent_calls = [e.data["name"] for e in events if e.type == "tool_call" and e.data["by"] == "agent"]
-    assert agent_calls == ["get_suppliers", "get_budget", "get_storage", "plan_order", "create_po", "create_po",
-                           "submit_decision"]
+    assert agent_calls == ["plan_order", "create_po", "create_po", "submit_decision"]
     assert [r["status"] for r in results(events, "create_po")] == ["BLOCKED", "WRITTEN"]
-    assert [c.by for c in result.tool_calls] == ["system"] * 6 + ["agent"] * 6
+    assert [c.by for c in result.tool_calls] == ["system"] * 9 + ["agent"] * 3
     types = [e.type for e in events]
     assert types[0] == "run_started" and types[-1] == "run_finished"
     assert types.index("decision") < types.index("verification") < types.index("run_finished")
@@ -164,16 +162,16 @@ def test_submit_decision_written_as_fenced_json_is_recovered_and_verified():
 
 
 def test_recovered_call_keeps_the_message_sequence_valid():
-    text = '{"name": "get_budget", "arguments": {"sku": "SKU-1002"}}'
+    text = '{"name": "get_promotions", "arguments": {"sku": "SKU-1002"}}'
     llm = scripted_llm([reply(text=text), reply(submit("ACCEPT", 0, 30.0))])
     events = []
     result = run_agent("S1-MODIFY", llm, in_memory=True, on_event=events.append)
     assistant, tool = llm.sent[1][-2:]
     assert assistant["content"] == text
     assert assistant["tool_calls"] == [{"id": "recovered-1", "type": "function", "function": {
-        "name": "get_budget", "arguments": '{"sku": "SKU-1002"}'}}]
+        "name": "get_promotions", "arguments": '{"sku": "SKU-1002"}'}}]
     assert tool["role"] == "tool" and tool["tool_call_id"] == "recovered-1"
-    assert [r["ok"] for r in results(events, "get_budget")] == [True]
+    assert [r["ok"] for r in results(events, "get_promotions")] == [True]
     assert result.outcome == "DECIDED"
 
 

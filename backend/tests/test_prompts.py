@@ -52,3 +52,23 @@ def test_trigger_message_has_parseable_blocks_and_leaks_no_answer(sid):
 def test_run_sku_is_the_triggers_product(sid):
     run, _ = new_run(sid, in_memory=True)
     assert run.sku == re.search(r"SKU-\d+", SCENARIOS[sid].situation).group()
+
+
+def test_preload_covers_everything_the_agent_always_needs():
+    assert SNAPSHOT_TOOLS == ("get_product", "get_inventory", "get_purchase_orders", "get_forecast",
+                              "get_sales_history", "get_suppliers", "get_budget", "get_storage")
+    # the prompt tells the model not to fetch what the code already did
+    assert "supplier offers, budget and storage. Do not fetch those again." in SYSTEM_PROMPT
+    assert "Before buying anything, read" not in SYSTEM_PROMPT
+
+
+def test_prompt_says_submit_decision_writes_nothing_and_defines_modify_broadly():
+    assert ("End with exactly one call to submit_decision. submit_decision only reports what you have already done; "
+            "it does not place, change or cancel anything. Make every write first, read its result, then submit.") in SYSTEM_PROMPT
+    assert ("MODIFY: you changed the plan in any way: you created a PO that differs from what was recommended, "
+            "created any PO on a demand alert or supplier message, or changed or cancelled a PO.") in SYSTEM_PROMPT
+    assert "Read get_promotions whenever recent sales differ clearly from the forecast." in SYSTEM_PROMPT
+
+
+def test_prompt_has_no_dashes_or_vendor_names():
+    assert "–" not in SYSTEM_PROMPT and "—" not in SYSTEM_PROMPT
