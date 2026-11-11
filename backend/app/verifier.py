@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .actions import AGENT_ESCALATION_KINDS
-from .calculations import inbound_arrivals, project_stock
+from .calculations import demand_stats, inbound_arrivals, project_stock
 from .context import OPEN_PO_STATUSES, load_sku_context
 from .runs import Run
 from .validator import validate_purchase
@@ -51,7 +51,7 @@ def _modified(conn: sqlite3.Connection, run: Run) -> dict[str, int]:
     return first
 
 
-def _recorded_demand(conn: sqlite3.Connection, run: Run, po_id: str) -> float | None:
+def recorded_demand(conn: sqlite3.Connection, run: Run, po_id: str) -> float | None:
     """The daily demand the agent validated the PO with: its latest create or modify audit row."""
     row = conn.execute("SELECT details_json FROM audit_log WHERE run_id = ? AND entity_id = ? "
                        "AND action IN ('PO_CREATED', 'PO_MODIFIED') ORDER BY id DESC LIMIT 1",
@@ -59,7 +59,7 @@ def _recorded_demand(conn: sqlite3.Connection, run: Run, po_id: str) -> float | 
     return json.loads(row[0]).get("daily_demand") if row else None
 
 
-def _touched_pos(conn: sqlite3.Connection, run: Run) -> list[sqlite3.Row]:
+def touched_pos(conn: sqlite3.Connection, run: Run) -> list[sqlite3.Row]:
     """Open POs the agent created or modified."""
     modified = _modified(conn, run)
     return [po for po in conn.execute(f"SELECT * FROM purchase_orders WHERE node_id = ? AND status IN ({OPEN}) "
@@ -71,13 +71,13 @@ def new_units(conn: sqlite3.Connection, run: Run) -> int:
     """Units expected to arrive on POs the agent created or increased (confirmed quantity where known)."""
     modified = _modified(conn, run)
     total = 0
-    for po in _touched_pos(conn, run):
+    for po in touched_pos(conn, run):
         expected = po["qty_ordered"] if po["qty_confirmed"] is None else po["qty_confirmed"]
         total += expected if po["created_by"] == "agent" else max(0, expected - modified[po["po_id"]])
     return total
 
 
-def _escalated(conn: sqlite3.Connection, run: Run, kind: str | None = None, po_id: str | None = None) -> bool:
+def escalated(conn: sqlite3.Connection, run: Run, kind: str | None = None, po_id: str | None = None) -> bool:
     """An escalation the agent raised: any kind, or one kind; for a PO, one about it or about nothing in particular."""
     sql = f"SELECT 1 FROM escalations WHERE run_id = ? AND kind IN ({AGENT_KINDS})"
     params: list = [run.run_id]
@@ -92,10 +92,10 @@ def _escalated(conn: sqlite3.Connection, run: Run, kind: str | None = None, po_i
 
 def verify(conn: sqlite3.Connection, run: Run, decision: SubmitDecisionArgs | None) -> VerificationResult:
     findings: list[Finding] = []
-    touched = _touched_pos(conn, run)
+    touched = touched_pos(conn, run)
 
     for po in touched:
-        demand = _recorded_demand(conn, run, po["po_id"])
+        demand = recorded_demand(conn, run, po["po_id"])
         if demand is None:
             continue
         ctx = load_sku_context(conn, run.node_id, po["sku"])
@@ -111,7 +111,7 @@ def verify(conn: sqlite3.Connection, run: Run, decision: SubmitDecisionArgs | No
         gap = po["qty_ordered"] - po["qty_confirmed"]
         topped_up = conn.execute(f"SELECT 1 FROM purchase_orders WHERE parent_po_id = ? AND created_by = 'agent' "
                                  f"AND status IN ({OPEN})", (po["po_id"],)).fetchone()
-        if not topped_up and not _escalated(conn, run, po_id=po["po_id"]):
+        if not topped_up and not escalated(conn, run, po_id=po["po_id"]):
             findings.append(Finding(
                 "UNRESOLVED_SHORTFALL",
                 f"{po['po_id']} was confirmed at {po['qty_confirmed']} of {po['qty_ordered']} units and the gap of "
@@ -130,9 +130,9 @@ def verify(conn: sqlite3.Connection, run: Run, decision: SubmitDecisionArgs | No
             "from the POs you created or increased (the supplier's confirmed quantity where it answered).",
             {"claimed": decision.new_units, "actual": units}))
 
-    demand = decision.daily_demand_used
-    if demand and demand > 0 and not _escalated(conn, run):
-        ctx = load_sku_context(conn, run.node_id, run.sku)
+    ctx = load_sku_context(conn, run.node_id, run.sku)
+    demand = decision.daily_demand_used or demand_stats(ctx).forecast_daily  # no stated demand: the forecast mean
+    if demand > 0 and not escalated(conn, run):
         primary = next((o for o in ctx.offers if o.is_primary), None)
         horizon = (primary.lead_time_days if primary else 0) + ctx.review_period_days
         stockout = project_stock(ctx.on_hand, demand, inbound_arrivals(ctx)).stockout_day
@@ -146,7 +146,7 @@ def verify(conn: sqlite3.Connection, run: Run, decision: SubmitDecisionArgs | No
         findings.append(Finding("DECISION_ACTION_MISMATCH",
                                 f"The decision is {decision.decision} but {units} new units were bought.",
                                 {"decision": decision.decision, "units": units}))
-    if decision.decision == "INVESTIGATE" and not _escalated(conn, run, kind="INVESTIGATION"):
+    if decision.decision == "INVESTIGATE" and not escalated(conn, run, kind="INVESTIGATION"):
         findings.append(Finding("DECISION_ACTION_MISMATCH",
                                 "The decision is INVESTIGATE but no INVESTIGATION escalation was raised.",
                                 {"decision": decision.decision}))

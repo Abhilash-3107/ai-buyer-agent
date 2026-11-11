@@ -67,8 +67,10 @@ def test_stockout_unresolved_unless_escalated():
     assert codes(conn, run, decision("ACCEPT", 0)) == []
 
 
-def test_stockout_check_is_skipped_without_a_demand_assumption():
+def test_stockout_check_falls_back_to_the_forecast_without_a_demand_assumption():
     run, conn = new_run("S2-SOURCE-ELSEWHERE", in_memory=True)
+    assert codes(conn, run, decision("ACCEPT", 0, demand=None)) == ["STOCKOUT_UNRESOLVED"]
+    actions.escalate(conn, run, "SUPPLIER_ISSUE", "no supplier", {})
     assert codes(conn, run, decision("ACCEPT", 0, demand=None)) == []
 
 
