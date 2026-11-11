@@ -1,0 +1,19 @@
+# secrets
+.env
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# runtime data (each scenario run gets a fresh SQLite file)
+backend/data/
+
+# node
+node_modules/
+frontend/dist/
+
+# os
+.DS_Store
+archive/
