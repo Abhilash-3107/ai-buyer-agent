@@ -101,6 +101,7 @@ class ToolCallRecord:
     result: dict
     category: str | None
     ok: bool
+    by: str = "agent"  # "system" for facts the code preloads, "agent" for what the model chose to call
 
 
 @dataclass(frozen=True)
@@ -152,7 +153,7 @@ class ToolSession:
         except KeyError:
             raise ToolError(f"Unknown SKU {sku!r}: {self.run.node_id} does not stock it") from None
 
-    def call(self, name: str, args: dict) -> dict:
+    def call(self, name: str, args: dict, by: str = "agent") -> dict:
         """Run one tool. Never raises on bad model input."""
         tool = TOOLS.get(name)
         if tool is None:
@@ -164,7 +165,7 @@ class ToolSession:
                 result = {"ok": False, "error": f"Invalid arguments for {name}: {_readable(e)}"}
             except ToolError as e:
                 result = {"ok": False, "error": str(e)}
-        self.calls.append(ToolCallRecord(name, args, result, tool.category if tool else None, result["ok"]))
+        self.calls.append(ToolCallRecord(name, args, result, tool.category if tool else None, result["ok"], by))
         return result
 
     def openai_tools(self) -> list[dict]:
@@ -299,11 +300,16 @@ def _plan_order(s: ToolSession, a: PlanArgs) -> dict:
 
 # --- write tools --------------------------------------------------------------------------------
 def _action_dict(r: actions.ActionResult) -> dict:
-    supplier = None
+    """A supplier REJECTED is ok=false at the top level, so the model cannot read it as success."""
+    supplier = shortfall = None
+    ok, message = r.ok, r.message
     if r.supplier is not None:
-        supplier = {**asdict(r.supplier), "shortfall": r.supplier.requested - r.supplier.confirmed}
-    return {"ok": r.ok, "status": r.status, "po_id": r.po_id, "escalation_id": r.escalation_id,
-            "message": r.message, "violations": [asdict(v) for v in r.violations], "supplier": supplier}
+        shortfall = r.supplier.requested - r.supplier.confirmed
+        supplier = {**asdict(r.supplier), "shortfall": shortfall}
+        if r.supplier.status == "REJECTED":
+            ok, message = False, f"SUPPLIER REJECTED THE PO, nothing will arrive. {r.message}"
+    return {"ok": ok, "status": r.status, "po_id": r.po_id, "escalation_id": r.escalation_id, "message": message,
+            "violations": [asdict(v) for v in r.violations], "shortfall": shortfall, "supplier": supplier}
 
 
 def _create_po(s: ToolSession, a: CreatePOArgs) -> dict:

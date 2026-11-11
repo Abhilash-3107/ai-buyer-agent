@@ -95,10 +95,11 @@ def _close_approval(conn: sqlite3.Connection, po_id: str, status: str) -> None:
 
 
 def _gate(conn: sqlite3.Connection, run: Run, attempt: str, ctx: SkuContext, supplier_id: str, qty: int, daily_demand: float,
-          entity_id: str | None, justification: str | None,
-          replaces_po_id: str | None = None) -> tuple[ValidationResult, ActionResult | None]:
+          entity_id: str | None, justification: str | None, replaces_po_id: str | None = None,
+          arrival_day: int | None = None) -> tuple[ValidationResult, ActionResult | None]:
     """Steps 1-3: errors block, warnings wait for a justification. A refusal is already audited."""
-    validation = validate_purchase(ctx, supplier_id, qty, daily_demand, replaces_po_id=replaces_po_id)
+    validation = validate_purchase(ctx, supplier_id, qty, daily_demand, replaces_po_id=replaces_po_id,
+                                   arrival_day=arrival_day)
     errors = [v for v in validation.violations if v.severity == "error"]
     if errors:
         message = "Blocked: " + "; ".join(v.message for v in errors)
@@ -168,7 +169,8 @@ def create_po(conn: sqlite3.Connection, run: Run, sku: str, supplier_id: str, qt
          parent_po_id, notes))
     return _route(conn, run, po_id, validation.po_value, "PO_CREATED",
                   {"sku": sku, "supplier_id": supplier_id, "qty": qty, "po_value": validation.po_value,
-                   "parent_po_id": parent_po_id, "reason": reason, "justification": justification,
+                   "parent_po_id": parent_po_id, "daily_demand": daily_demand, "reason": reason,
+                   "justification": justification,
                    "warnings": [v.code for v in validation.violations]})
 
 
@@ -184,8 +186,9 @@ def modify_po(conn: sqlite3.Connection, run: Run, po_id: str, new_qty: int, dail
                        "Add a linked top-up PO or cancel instead.")
 
     ctx = load_sku_context(conn, run.node_id, po["sku"])
+    own_arrival = next(p.arrival_day for p in ctx.inbound if p.po_id == po_id)  # the PO keeps its own date
     validation, refusal = _gate(conn, run, "modify_po", ctx, po["supplier_id"], new_qty, daily_demand, po_id,
-                                justification, replaces_po_id=po_id)
+                                justification, replaces_po_id=po_id, arrival_day=own_arrival)
     if refusal:
         return refusal
 
@@ -196,7 +199,7 @@ def modify_po(conn: sqlite3.Connection, run: Run, po_id: str, new_qty: int, dail
                                      _append_note(po["notes"], note), po_id))
     return _route(conn, run, po_id, validation.po_value, "PO_MODIFIED",
                   {"old_qty": po["qty_ordered"], "new_qty": new_qty, "po_value": validation.po_value,
-                   "reason": reason, "justification": justification,
+                   "daily_demand": daily_demand, "reason": reason, "justification": justification,
                    "warnings": [v.code for v in validation.violations]})
 
 
@@ -244,6 +247,15 @@ def escalate(conn: sqlite3.Connection, run: Run, kind: str, summary: str, detail
     escalation_id = _insert_escalation(conn, run, kind, po_id, summary, details)
     audit(conn, run.run_id, "agent", "ESCALATED", escalation_id, {"kind": kind, "po_id": po_id, "summary": summary})
     return _result("WRITTEN", f"Escalation {escalation_id} ({kind}) is open for a human.", po_id=po_id,
+                   escalation_id=escalation_id)
+
+
+@_atomic
+def flag_run(conn: sqlite3.Connection, run: Run, summary: str, details: dict) -> ActionResult:
+    """Verifier side: the run ended with findings nobody fixed, so a human must look at it."""
+    escalation_id = _insert_escalation(conn, run, "VERIFICATION_FAILED", None, summary, details)
+    audit(conn, run.run_id, "verifier", "RUN_FLAGGED", escalation_id, {"summary": summary, **details})
+    return _result("WRITTEN", f"Escalation {escalation_id} (VERIFICATION_FAILED) is open for a human.",
                    escalation_id=escalation_id)
 
 

@@ -19,24 +19,29 @@ class Run:
     run_id: str
     scenario_id: str
     node_id: str  # the one node this run may read and write, taken from the trigger
+    sku: str  # the product the trigger is about, taken from the data like the node
     path: Path
 
 
-def _trigger_node(conn: sqlite3.Connection, trigger: dict) -> str:
-    """Every trigger is about one node; find it in the data instead of hard-coding it."""
+def _trigger_ref(conn: sqlite3.Connection, trigger: dict) -> tuple[str, str]:
+    """Every trigger is about one node and one SKU; find both in the data instead of hard-coding them."""
     kind = trigger["type"]
     if kind == "DEMAND_ALERT":
-        return trigger["node_id"]
+        return trigger["node_id"], trigger["sku"]
     if kind == "RECOMMENDATION_REVIEW":
-        row = conn.execute("SELECT node_id FROM recommendations WHERE rec_id = ?", (trigger["rec_id"],)).fetchone()
+        row = conn.execute("SELECT node_id, sku FROM recommendations WHERE rec_id = ?", (trigger["rec_id"],)).fetchone()
     elif kind == "SUPPLIER_EVENT":
-        row = conn.execute("SELECT po.node_id FROM supplier_events e JOIN purchase_orders po ON po.po_id = e.po_id "
-                           "WHERE e.event_id = ?", (trigger["event_id"],)).fetchone()
+        row = conn.execute("SELECT po.node_id, po.sku FROM supplier_events e JOIN purchase_orders po "
+                           "ON po.po_id = e.po_id WHERE e.event_id = ?", (trigger["event_id"],)).fetchone()
     else:
         raise ValueError(f"Unknown trigger type {kind!r}")
     if row is None:
         raise ValueError(f"Trigger {trigger} points at nothing in the database")
-    return row[0]
+    return row[0], row[1]
+
+
+def _trigger_node(conn: sqlite3.Connection, trigger: dict) -> str:
+    return _trigger_ref(conn, trigger)[0]
 
 
 def new_run(scenario_id: str, *, in_memory: bool = False) -> tuple[Run, sqlite3.Connection]:
@@ -46,5 +51,5 @@ def new_run(scenario_id: str, *, in_memory: bool = False) -> tuple[Run, sqlite3.
     conn = build_scenario_db(scenario_id, path)
     conn.execute("INSERT INTO meta VALUES ('run_id', ?)", (run_id,))
     conn.commit()
-    node_id = _trigger_node(conn, SCENARIOS[scenario_id].trigger)
-    return Run(run_id, scenario_id, node_id, path), conn
+    node_id, sku = _trigger_ref(conn, SCENARIOS[scenario_id].trigger)
+    return Run(run_id, scenario_id, node_id, sku, path), conn

@@ -46,8 +46,11 @@ def _warning(code: str, message: str, **details) -> Violation:
 
 
 def validate_purchase(ctx: SkuContext, supplier_id: str, qty: int, daily_demand: float,
-                      *, replaces_po_id: str | None = None) -> ValidationResult:
-    """With `replaces_po_id`, "change PO X to qty Q" is validated as a fresh PO of Q."""
+                      *, replaces_po_id: str | None = None, arrival_day: int | None = None) -> ValidationResult:
+    """With `replaces_po_id`, "change PO X to qty Q" is validated as a fresh PO of Q.
+
+    `arrival_day` overrides the lead-time arrival, so a modified PO is judged on its own delivery date.
+    """
     out: list[Violation] = []
     if replaces_po_id is not None:
         if any(p.po_id == replaces_po_id for p in ctx.inbound):
@@ -75,7 +78,7 @@ def validate_purchase(ctx: SkuContext, supplier_id: str, qty: int, daily_demand:
         return ValidationResult(False, tuple(out), 0.0, post_cover, 0)
 
     po_value = qty * offer.unit_cost
-    arrival_day = offer.lead_time_days
+    arrival_day = offer.lead_time_days if arrival_day is None else arrival_day
     limits = qty_limits(ctx, offer, daily_demand)
 
     if not offer.is_approved:
@@ -97,7 +100,7 @@ def validate_purchase(ctx: SkuContext, supplier_id: str, qty: int, daily_demand:
                           units_after_order=position + qty, cover_days=post_cover,
                           shelf_life_days=ctx.shelf_life_days, max_qty=limits.shelf_life))
 
-    coverage_days = arrival_day + ctx.review_period_days + ctx.safety_stock_days
+    coverage_days = offer.lead_time_days + ctx.review_period_days + ctx.safety_stock_days
     if post_cover > EXCESS_COVER_FACTOR * coverage_days:
         out.append(_warning("EXCESS_COVER",
                             f"Post-order cover is {post_cover:.1f} days, over {EXCESS_COVER_FACTOR:g} x the "
