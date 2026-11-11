@@ -8,9 +8,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 from collections import Counter
 from dataclasses import asdict, replace
@@ -20,6 +22,7 @@ from statistics import fmean
 from .agent import run_agent
 from .baselines import BASELINES, BaselineClient
 from .llm import LLMClient, LLMConfig
+from .prompts import SYSTEM_PROMPT
 from .scenarios import SCENARIOS
 from .scoring import CHECK_NAMES, ScoreCard, score_run
 
@@ -89,9 +92,15 @@ def _mark(checks: list[dict]) -> str:
     return "✓" if all(applicable) else "✗" if not any(applicable) else f"{sum(applicable)}/{len(applicable)}"
 
 
-def render_report(name: str, cards: list[dict], repeats: int) -> str:
+def _version_line(agent_version: dict | None) -> list[str]:
+    if not agent_version:
+        return []
+    return [f"Agent version: git {agent_version.get('git') or 'unknown'}, prompt {agent_version.get('prompt_sha') or 'unknown'}.", ""]
+
+
+def render_report(name: str, cards: list[dict], repeats: int, agent_version: dict | None = None) -> str:
     s = summarize(cards)
-    lines = [f"# Evaluation: {name}", "",
+    lines = [f"# Evaluation: {name}", "", *_version_line(agent_version),
              "Every score is a deterministic check on the final database and the tool calls, with its reason written next to it.",
              f"{s['runs']} runs: {s['scenarios']} scenarios x {repeats} repeat(s).", "",
              "## Headline", "",
@@ -162,12 +171,37 @@ def _slug(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", name)
 
 
-def write_eval(out: Path, name: str, kind: str, cards: list[ScoreCard], repeats: int, temperature: float | None) -> None:
-    data = {"name": name, "kind": kind, "repeats": repeats, "temperature": temperature,
+def _git(*args: str) -> str | None:
+    try:
+        done = subprocess.run(["git", *args], cwd=Path(__file__).resolve().parent, capture_output=True, text=True,
+                              timeout=10, check=True)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return done.stdout.strip()
+
+
+def agent_version() -> dict:
+    """Which agent produced a report: the git commit (marked -dirty when the code has uncommitted changes) and a
+    hash of the system prompt. Reports saved before this field existed simply lack it."""
+    sha = _git("rev-parse", "--short", "HEAD")
+    if sha:
+        # the reports this very run writes under docs/eval must not make the tree look dirty
+        changed = _git("status", "--porcelain", "--", ".", ":(top,exclude)docs/eval")
+        if changed is None:
+            sha = None
+        elif changed:
+            sha += "-dirty"
+    return {"git": sha or None, "prompt_sha": hashlib.sha256(SYSTEM_PROMPT.encode()).hexdigest()[:12]}
+
+
+def write_eval(out: Path, name: str, kind: str, cards: list[ScoreCard], repeats: int, temperature: float | None,
+               version: dict | None = None) -> None:
+    version = version or agent_version()
+    data = {"name": name, "kind": kind, "repeats": repeats, "temperature": temperature, "agent_version": version,
             "cards": [asdict(c) for c in cards]}
     out.mkdir(parents=True, exist_ok=True)
     for suffix, text in ((".json", json.dumps(data, indent=2, allow_nan=False) + "\n"),
-                         (".md", render_report(name, data["cards"], repeats))):
+                         (".md", render_report(name, data["cards"], repeats, version))):
         target = out / f"{_slug(name)}{suffix}"
         tmp = target.with_name(target.name + ".tmp")
         tmp.write_text(text)
@@ -206,8 +240,9 @@ def main(argv: list[str]) -> int:
         name, kind, temperature = config.model, "model", config.temperature
         def make_client():
             return LLMClient(config)
+    version = agent_version()  # taken once, when the run starts
     evaluate(name, make_client, ids, args.repeats, log=lambda m: print(m, flush=True),
-             on_card=lambda done: write_eval(args.out, name, kind, done, args.repeats, temperature))
+             on_card=lambda done: write_eval(args.out, name, kind, done, args.repeats, temperature, version))
     print(f"wrote {args.out / _slug(name)}.json and .md")
     return 0
 

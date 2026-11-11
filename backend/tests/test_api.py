@@ -259,6 +259,16 @@ def test_eval_reports_use_the_contract_shape(client, tmp_path):
     assert client.get("/api/eval").status_code == 200 and not (tmp_path / "missing").exists()
 
 
+def test_eval_reports_load_with_or_without_agent_version(client, tmp_path):
+    eval_dir = tmp_path / "eval"
+    eval_dir.mkdir()
+    data = json.loads((api.evaluate.DEFAULT_OUT / "rubber_stamp.json").read_text())
+    data.pop("agent_version", None)
+    (eval_dir / "old.json").write_text(json.dumps({**data, "name": "old"}))
+    (eval_dir / "new.json").write_text(json.dumps({**data, "name": "new", "agent_version": {"git": None, "prompt_sha": "0" * 12}}))
+    assert [r["name"] for r in client.get("/api/eval").json()] == ["new", "old"]
+
+
 def test_eval_with_no_reports_is_empty(client):
     assert client.get("/api/eval").json() == []  # the directory does not even exist
 
