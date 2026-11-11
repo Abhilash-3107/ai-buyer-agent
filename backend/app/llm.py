@@ -67,11 +67,19 @@ class LLMConfig:
             temperature = float(temp) if temp not in (None, "") else None
         except ValueError:
             raise ValueError(f"LLM_TEMPERATURE must be a number (e.g. 0.2), got {temp!r}") from None
+        raw_timeout = os.getenv("LLM_TIMEOUT_S")
+        try:
+            timeout_s = float(raw_timeout) if raw_timeout not in (None, "") else cls.timeout_s
+        except ValueError:
+            raise ValueError(f"LLM_TIMEOUT_S must be a number of seconds (e.g. 300), got {raw_timeout!r}") from None
+        if timeout_s <= 0:
+            raise ValueError(f"LLM_TIMEOUT_S must be greater than 0, got {raw_timeout!r}")
         return cls(
             base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
             api_key=os.getenv("LLM_API_KEY", ""),
             model=os.getenv("LLM_MODEL", "gpt-4.1-mini"),
             temperature=temperature,
+            timeout_s=timeout_s,
         )
 
     @property

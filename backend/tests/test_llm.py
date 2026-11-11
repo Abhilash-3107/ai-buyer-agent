@@ -1,6 +1,8 @@
 """LLMClient tests with a fake OpenAI client: no network, no API key."""
 from types import SimpleNamespace as NS
 
+import pytest
+
 from app.llm import LLMClient, LLMConfig
 
 CFG = LLMConfig(base_url="http://localhost:11434/v1", api_key="", model="fake", temperature=None)
@@ -56,6 +58,19 @@ def test_temperature_is_sent_when_configured():
     cfg = LLMConfig(base_url=CFG.base_url, api_key="", model="fake", temperature=0.2)
     LLMClient(cfg, client=client).chat([{"role": "user", "content": "hi"}])
     assert sent["temperature"] == 0.2
+
+
+def test_timeout_is_read_from_env(monkeypatch):
+    monkeypatch.setenv("LLM_TIMEOUT_S", "300")
+    assert LLMConfig.from_env().timeout_s == 300.0
+    monkeypatch.delenv("LLM_TIMEOUT_S")
+    assert LLMConfig.from_env().timeout_s == 120.0
+
+
+def test_invalid_timeout_raises_clear_error(monkeypatch):
+    monkeypatch.setenv("LLM_TIMEOUT_S", "soon")
+    with pytest.raises(ValueError, match="LLM_TIMEOUT_S"):
+        LLMConfig.from_env()
 
 
 def test_missing_usage_gives_empty_usage():
