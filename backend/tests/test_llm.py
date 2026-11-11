@@ -6,7 +6,10 @@ from app.llm import LLMClient, LLMConfig
 CFG = LLMConfig(base_url="http://localhost:11434/v1", api_key="", model="fake", temperature=None)
 
 
-def fake_client(content=None, tool_calls=None, usage=NS(prompt_tokens=10, completion_tokens=5)):
+DEFAULT_USAGE = NS(prompt_tokens=10, completion_tokens=5)
+
+
+def fake_client(content=None, tool_calls=None, usage=DEFAULT_USAGE):
     resp = NS(model="fake", usage=usage,
               choices=[NS(finish_reason="tool_calls" if tool_calls else "stop",
                           message=NS(content=content, tool_calls=tool_calls))])

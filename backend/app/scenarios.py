@@ -16,8 +16,8 @@ The eval (Phase 5) compares the agent's actions against these expectations.
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 from .builder import Builder, steady
 

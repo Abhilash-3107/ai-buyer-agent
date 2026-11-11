@@ -61,7 +61,7 @@ class LLMConfig:
     max_retries: int = 2
 
     @classmethod
-    def from_env(cls) -> "LLMConfig":
+    def from_env(cls) -> LLMConfig:
         temp = os.getenv("LLM_TEMPERATURE")
         try:
             temperature = float(temp) if temp not in (None, "") else None
@@ -131,7 +131,7 @@ def _parse_tool_call(tc: Any) -> ToolCall:
     try:
         args = json.loads(raw)
         if not isinstance(args, dict):
-            raise ValueError("arguments must be a JSON object")
+            raise ValueError("arguments must be a JSON object")  # noqa: TRY004 - caught below, reported as parse_error
         return ToolCall(id=tc.id, name=tc.function.name, arguments=args, raw_arguments=raw)
     except (json.JSONDecodeError, ValueError) as e:
         return ToolCall(id=tc.id, name=tc.function.name, arguments={}, raw_arguments=raw,
