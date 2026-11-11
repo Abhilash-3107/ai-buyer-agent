@@ -17,3 +17,6 @@ frontend/dist/
 # os
 .DS_Store
 archive/
+
+# design tool working files
+.taste-skill/
