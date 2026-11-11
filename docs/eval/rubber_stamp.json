@@ -1,0 +1,686 @@
+{
+  "name": "rubber_stamp",
+  "kind": "baseline",
+  "repeats": 1,
+  "temperature": null,
+  "cards": [
+    {
+      "scenario_id": "S1-MODIFY",
+      "run_id": "20261111T184648-a93150",
+      "model": "rubber_stamp",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": false,
+          "reason": "decided ACCEPT, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": false,
+          "reason": "never read: budget, storage, suppliers"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": false,
+          "reason": "0 units, expected 168-240"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": false,
+          "reason": "verifier findings: STOCKOUT_UNRESOLVED"
+        },
+        {
+          "name": "recovery",
+          "applicable": true,
+          "passed": false,
+          "reason": "1 of 1 failed writes (create_po BLOCKED) were never followed by a successful write or an escalation"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 0,
+      "turns": 3,
+      "tool_calls": 1,
+      "blocked_writes": 1,
+      "tokens_in": 0,
+      "tokens_out": 0,
+      "latency_s": 0.012,
+      "verifier_findings": [
+        "STOCKOUT_UNRESOLVED: At 39.14 units/day the stock runs out on day 10, before the next review (day 12), and no escalation was raised."
+      ],
+      "info_read_by_agent": []
+    },
+    {
+      "scenario_id": "S1-ACCEPT",
+      "run_id": "20261111T184648-6b40ea",
+      "model": "rubber_stamp",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided ACCEPT, expected ACCEPT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": false,
+          "reason": "never read: budget, storage, suppliers"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "480 units, expected 456-504"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 480,
+      "turns": 2,
+      "tool_calls": 1,
+      "blocked_writes": 0,
+      "tokens_in": 0,
+      "tokens_out": 0,
+      "latency_s": 0.011,
+      "verifier_findings": [],
+      "info_read_by_agent": []
+    },
+    {
+      "scenario_id": "S1-REJECT",
+      "run_id": "20261111T184648-393f21",
+      "model": "rubber_stamp",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": false,
+          "reason": "decided ACCEPT, expected REJECT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 3 required categories read; the agent itself read none of them"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "0 units, expected 0"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 1 failed writes were followed by a successful write or an escalation, or the agent rightly gave up and the action check passed"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 0,
+      "turns": 2,
+      "tool_calls": 1,
+      "blocked_writes": 1,
+      "tokens_in": 0,
+      "tokens_out": 0,
+      "latency_s": 0.009,
+      "verifier_findings": [],
+      "info_read_by_agent": []
+    },
+    {
+      "scenario_id": "S1-INVESTIGATE",
+      "run_id": "20261111T184648-a3ecf1",
+      "model": "rubber_stamp",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": false,
+          "reason": "decided ACCEPT, expected INVESTIGATE"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 3 required categories read; the agent itself read none of them"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": false,
+          "reason": "no INVESTIGATION escalation was raised"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": false,
+          "reason": "verifier findings: STOCKOUT_UNRESOLVED"
+        },
+        {
+          "name": "recovery",
+          "applicable": true,
+          "passed": false,
+          "reason": "1 of 1 failed writes (create_po BLOCKED) were never followed by a successful write or an escalation"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 0,
+      "turns": 3,
+      "tool_calls": 1,
+      "blocked_writes": 1,
+      "tokens_in": 0,
+      "tokens_out": 0,
+      "latency_s": 0.01,
+      "verifier_findings": [
+        "STOCKOUT_UNRESOLVED: At 41.57 units/day the stock runs out on day 0, before the next review (day 12), and no escalation was raised."
+      ],
+      "info_read_by_agent": []
+    },
+    {
+      "scenario_id": "S2-SOURCE-ELSEWHERE",
+      "run_id": "20261111T184648-aa200b",
+      "model": "rubber_stamp",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": false,
+          "reason": "decided ACCEPT, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": false,
+          "reason": "never read: budget, suppliers"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": false,
+          "reason": "0 units, expected 90-220"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": false,
+          "reason": "verifier findings: STOCKOUT_UNRESOLVED"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 0,
+      "turns": 3,
+      "tool_calls": 1,
+      "blocked_writes": 0,
+      "tokens_in": 0,
+      "tokens_out": 0,
+      "latency_s": 0.01,
+      "verifier_findings": [
+        "STOCKOUT_UNRESOLVED: At 40 units/day the stock runs out on day 10, before the next review (day 13), and no escalation was raised."
+      ],
+      "info_read_by_agent": []
+    },
+    {
+      "scenario_id": "S2-ACCEPT-SHORT",
+      "run_id": "20261111T184648-8527ee",
+      "model": "rubber_stamp",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided ACCEPT, expected ACCEPT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 4 required categories read; the agent itself read none of them"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "0 units, expected 0"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 0,
+      "turns": 2,
+      "tool_calls": 1,
+      "blocked_writes": 0,
+      "tokens_in": 0,
+      "tokens_out": 0,
+      "latency_s": 0.009,
+      "verifier_findings": [],
+      "info_read_by_agent": []
+    },
+    {
+      "scenario_id": "S2-ALT-ALSO-SHORT",
+      "run_id": "20261111T184648-1369c5",
+      "model": "rubber_stamp",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": false,
+          "reason": "decided ACCEPT, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": false,
+          "reason": "never read: budget, suppliers"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": false,
+          "reason": "0 units, expected 90-220"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": false,
+          "reason": "verifier findings: STOCKOUT_UNRESOLVED"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 0,
+      "turns": 3,
+      "tool_calls": 1,
+      "blocked_writes": 0,
+      "tokens_in": 0,
+      "tokens_out": 0,
+      "latency_s": 0.009,
+      "verifier_findings": [
+        "STOCKOUT_UNRESOLVED: At 40 units/day the stock runs out on day 10, before the next review (day 13), and no escalation was raised."
+      ],
+      "info_read_by_agent": []
+    },
+    {
+      "scenario_id": "S3-SUSTAINED-SPIKE",
+      "run_id": "20261111T184648-825718",
+      "model": "rubber_stamp",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": false,
+          "reason": "decided ACCEPT, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": false,
+          "reason": "never read: promotions"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "420 units, expected 180-650"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 420,
+      "turns": 4,
+      "tool_calls": 3,
+      "blocked_writes": 0,
+      "tokens_in": 0,
+      "tokens_out": 0,
+      "latency_s": 0.009,
+      "verifier_findings": [],
+      "info_read_by_agent": [
+        "suppliers"
+      ]
+    },
+    {
+      "scenario_id": "S3-ONE-OFF-SPIKE",
+      "run_id": "20261111T184648-8bff38",
+      "model": "rubber_stamp",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided ACCEPT, expected ACCEPT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 4 required categories read; the agent itself read none of them"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": false,
+          "reason": "336 units, expected 0"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 336,
+      "turns": 4,
+      "tool_calls": 3,
+      "blocked_writes": 0,
+      "tokens_in": 0,
+      "tokens_out": 0,
+      "latency_s": 0.01,
+      "verifier_findings": [],
+      "info_read_by_agent": [
+        "suppliers"
+      ]
+    },
+    {
+      "scenario_id": "S3-PROMO-ENDING",
+      "run_id": "20261111T184648-739fc8",
+      "model": "rubber_stamp",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided ACCEPT, expected ACCEPT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": false,
+          "reason": "never read: promotions"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": false,
+          "reason": "480 units, expected 0"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 480,
+      "turns": 4,
+      "tool_calls": 3,
+      "blocked_writes": 0,
+      "tokens_in": 0,
+      "tokens_out": 0,
+      "latency_s": 0.011,
+      "verifier_findings": [],
+      "info_read_by_agent": [
+        "suppliers"
+      ]
+    },
+    {
+      "scenario_id": "S4-BUDGET",
+      "run_id": "20261111T184648-2c70c6",
+      "model": "rubber_stamp",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": false,
+          "reason": "decided ACCEPT, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": false,
+          "reason": "never read: budget, suppliers"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": false,
+          "reason": "0 units, expected 120-396; no BUDGET_INCREASE escalation was raised"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": false,
+          "reason": "verifier findings: STOCKOUT_UNRESOLVED"
+        },
+        {
+          "name": "recovery",
+          "applicable": true,
+          "passed": false,
+          "reason": "1 of 1 failed writes (create_po BLOCKED) were never followed by a successful write or an escalation"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 0,
+      "turns": 3,
+      "tool_calls": 1,
+      "blocked_writes": 1,
+      "tokens_in": 0,
+      "tokens_out": 0,
+      "latency_s": 0.009,
+      "verifier_findings": [
+        "STOCKOUT_UNRESOLVED: At 61.14 units/day the stock runs out on day 7, before the next review (day 14), and no escalation was raised."
+      ],
+      "info_read_by_agent": []
+    },
+    {
+      "scenario_id": "S4-MOQ-VS-SHELF-LIFE",
+      "run_id": "20261111T184648-854333",
+      "model": "rubber_stamp",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": false,
+          "reason": "decided ACCEPT, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": false,
+          "reason": "never read: suppliers"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": false,
+          "reason": "0 units, expected 36-72"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": false,
+          "reason": "verifier findings: STOCKOUT_UNRESOLVED"
+        },
+        {
+          "name": "recovery",
+          "applicable": true,
+          "passed": false,
+          "reason": "1 of 1 failed writes (create_po BLOCKED) were never followed by a successful write or an escalation"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 0,
+      "turns": 3,
+      "tool_calls": 1,
+      "blocked_writes": 1,
+      "tokens_in": 0,
+      "tokens_out": 0,
+      "latency_s": 0.009,
+      "verifier_findings": [
+        "STOCKOUT_UNRESOLVED: At 11.71 units/day the stock runs out on day 2, before the next review (day 5), and no escalation was raised."
+      ],
+      "info_read_by_agent": []
+    }
+  ]
+}
