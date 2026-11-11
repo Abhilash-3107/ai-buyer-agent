@@ -1,13 +1,16 @@
 """The HTTP API: contract shapes, the live event stream, human approval, restarts, demo mode and the eval page."""
 import json
 import shutil
+import sqlite3
+import threading
+import time
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from scripted import call, reply, scripted_llm, submit
 
-from app import api, runs
+from app import actions, api, runs
 from app.scenarios import SCENARIOS
 
 S1 = {"sku": "SKU-1002", "supplier_id": "SUP-METRO", "daily_demand": 40, "reason": "r"}
@@ -133,6 +136,50 @@ def test_reject_cancels_the_held_po(client, monkeypatch):
     assert r.status_code == 200 and r.json()["supplier"] is None
     s = client.get(f"/api/runs/{run_id}").json()
     assert po(s, esc["po_id"])["status"] == "CANCELLED" and pending_escalation(s)["status"] == "REJECTED"
+
+
+def _race(client, run_id, esc_id, verbs):
+    """The status codes of the same human decision sent by one thread per verb, released together."""
+    barrier, codes = threading.Barrier(len(verbs)), {}
+
+    def decide(i, verb):
+        barrier.wait()
+        codes[i] = client.post(f"/api/runs/{run_id}/escalations/{esc_id}/{verb}", json={"note": "n"}).status_code
+
+    threads = [threading.Thread(target=decide, args=(i, v)) for i, v in enumerate(verbs)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    return codes
+
+
+@pytest.mark.parametrize("verbs", [("approve", "approve"), ("approve", "reject")])
+def test_concurrent_decisions_have_exactly_one_winner(client, monkeypatch, verbs):
+    real_submit = actions.supplier_api.submit
+
+    def slow_submit(conn, po_id):  # widens the window in which a second request could slip in
+        time.sleep(0.05)
+        return real_submit(conn, po_id)
+
+    monkeypatch.setattr(actions.supplier_api, "submit", slow_submit)
+    for _ in range(10):
+        use_script(monkeypatch, *S4_SCRIPT)
+        run_id = start(client, "S4-BUDGET")
+        read_events(client, run_id)
+        esc = pending_escalation(client.get(f"/api/runs/{run_id}").json())
+        codes = _race(client, run_id, esc["escalation_id"], verbs)
+        assert sorted(codes.values()) == [200, 409]
+        winner = verbs[next(i for i, c in codes.items() if c == 200)]
+
+        db = sqlite3.connect(str(next(runs.RUNS_DIR.glob(f"*{run_id}.db"))))
+        logged = [a for (a,) in db.execute("SELECT action FROM audit_log WHERE actor = 'supplier_api' OR action LIKE 'PO_%'")
+                  if a != "PO_CREATED"]
+        status = db.execute("SELECT status FROM purchase_orders WHERE po_id = ?", (esc["po_id"],)).fetchone()[0]
+        db.close()
+        if winner == "approve":
+            assert logged.count("PO_APPROVED") == 1 and "PO_REJECTED" not in logged
+            assert status == "CONFIRMED" and logged.count("PO_CONFIRMED") == 1  # the supplier was called once
+        else:
+            assert logged == ["PO_REJECTED"] and status == "CANCELLED"
 
 
 def test_unknown_ids_and_bad_bodies(client, monkeypatch):

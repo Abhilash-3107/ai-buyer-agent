@@ -76,6 +76,7 @@ class Live:
 
 
 REGISTRY: dict[str, Live] = {}
+_REGISTRY_LOCK = threading.RLock()
 
 
 def _sidecar(run: Run) -> Path:
@@ -103,11 +104,11 @@ def _from_disk(run_id: str) -> Live | None:
 
 
 def _get(run_id: str) -> Live:
-    live = REGISTRY.get(run_id) or _from_disk(run_id)
-    if live is None:
-        raise HTTPException(404, f"unknown run {run_id}")
-    REGISTRY[run_id] = live
-    return live
+    with _REGISTRY_LOCK:
+        live = REGISTRY.get(run_id) or _from_disk(run_id)
+        if live is None:
+            raise HTTPException(404, f"unknown run {run_id}")
+        return REGISTRY.setdefault(run_id, live)
 
 
 def _start(scenario_id: str, client: LLMClient | BaselineClient) -> Live:
@@ -119,7 +120,9 @@ def _start(scenario_id: str, client: LLMClient | BaselineClient) -> Live:
         if e.type == "run_started":
             d = e.data
             run = Run(d["run_id"], scenario_id, d["node_id"], d["sku"], runs.RUNS_DIR / f"{scenario_id}__{d['run_id']}.db")
-            box["live"] = REGISTRY[run.run_id] = Live(run, model)
+            box["live"] = Live(run, model)
+            with _REGISTRY_LOCK:
+                REGISTRY[run.run_id] = box["live"]
             _save_sidecar(box["live"])
             ready.set()
         box["live"].push(asdict(e))
@@ -138,8 +141,11 @@ def _start(scenario_id: str, client: LLMClient | BaselineClient) -> Live:
             box["error"] = exc
             live = box.get("live")
             if live:
-                live.push({"seq": len(live.events) + 1, "turn": 0, "type": "error", "ts": 0,
-                           "data": {"message": f"{type(exc).__name__}: {exc}"}})
+                event = {"seq": len(live.events) + 1, "turn": 0, "type": "error", "ts": 0,
+                         "data": {"message": f"{type(exc).__name__}: {exc}"}}
+                with live.run.path.with_suffix(".trace.jsonl").open("a") as f:  # a restart shows the message too
+                    f.write(json.dumps(event, default=str, allow_nan=False) + "\n")
+                live.push(event)
         finally:
             ready.set()
             if live:
@@ -287,9 +293,12 @@ def create_run(body: RunRequest) -> dict:
 def list_runs() -> list[dict]:
     for side in sorted(runs.RUNS_DIR.glob("*.api.json"), key=lambda p: p.name.split("__")[-1], reverse=True)[:LIST_LIMIT]:
         run_id = side.name.split("__")[-1].removesuffix(".api.json")
-        if run_id not in REGISTRY and (live := _from_disk(run_id)):
-            REGISTRY[run_id] = live
-    return [_listing(live) for live in sorted(REGISTRY.values(), key=lambda lv: lv.run.run_id, reverse=True)][:LIST_LIMIT]
+        with _REGISTRY_LOCK:
+            if run_id not in REGISTRY and (live := _from_disk(run_id)):
+                REGISTRY[run_id] = live
+    with _REGISTRY_LOCK:
+        lives = list(REGISTRY.values())
+    return [_listing(live) for live in sorted(lives, key=lambda lv: lv.run.run_id, reverse=True)][:LIST_LIMIT]
 
 
 @app.get("/api/runs/{run_id}")

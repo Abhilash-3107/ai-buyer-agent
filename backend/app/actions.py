@@ -259,13 +259,22 @@ def flag_run(conn: sqlite3.Connection, run: Run, summary: str, details: dict) ->
                    escalation_id=escalation_id)
 
 
-def _pending_approval(conn: sqlite3.Connection, run: Run, escalation_id: str,
-                      attempt: str) -> tuple[sqlite3.Row | None, ActionResult | None]:
-    """The PENDING_APPROVAL PO behind an open APPROVAL escalation, or a refusal."""
-    esc = conn.execute("SELECT po_id FROM escalations WHERE escalation_id = ? AND kind = 'APPROVAL' "
-                       "AND status = 'OPEN'", (escalation_id,)).fetchone()
-    po = _own_po(conn, run, esc["po_id"]) if esc else None
+def _claim_approval(conn: sqlite3.Connection, run: Run, escalation_id: str, status: str,
+                    attempt: str) -> tuple[sqlite3.Row | None, ActionResult | None]:
+    """Claim an open APPROVAL escalation for this decision, or refuse.
+
+    BEGIN IMMEDIATE takes the write lock first (a second writer waits, then sees the claim and is refused),
+    and the guarded UPDATE is the claim itself, so two deciders can never both win, even across processes.
+    """
+    if not conn.in_transaction:
+        conn.execute("BEGIN IMMEDIATE")
+    claimed = conn.execute("UPDATE escalations SET status = ? WHERE escalation_id = ? AND kind = 'APPROVAL' "
+                           "AND status = 'OPEN'", (status, escalation_id)).rowcount
+    esc = conn.execute("SELECT po_id FROM escalations WHERE escalation_id = ?", (escalation_id,)).fetchone()
+    po = _own_po(conn, run, esc["po_id"]) if claimed and esc else None
     if po is None or po["status"] != "PENDING_APPROVAL":
+        if claimed:  # an open approval on a PO that is not pending or not this run's stays open
+            conn.execute("UPDATE escalations SET status = 'OPEN' WHERE escalation_id = ?", (escalation_id,))
         return None, _refuse(conn, run, "NOT_ALLOWED", attempt, None,
                              f"{escalation_id} is not an open approval for a pending PO", actor="human")
     return po, None
@@ -274,10 +283,9 @@ def _pending_approval(conn: sqlite3.Connection, run: Run, escalation_id: str,
 @_atomic
 def approve_po(conn: sqlite3.Connection, run: Run, escalation_id: str, note: str) -> ActionResult:
     """Human side: release a held PO to the supplier."""
-    po, refusal = _pending_approval(conn, run, escalation_id, "approve_po")
+    po, refusal = _claim_approval(conn, run, escalation_id, "APPROVED", "approve_po")
     if refusal:
         return refusal
-    conn.execute("UPDATE escalations SET status = 'APPROVED' WHERE escalation_id = ?", (escalation_id,))
     conn.execute("UPDATE purchase_orders SET status = 'SUBMITTED', notes = ? WHERE po_id = ?",
                  (_append_note(po["notes"], f"Approved: {note}"), po["po_id"]))
     audit(conn, run.run_id, "human", "PO_APPROVED", po["po_id"], {"escalation_id": escalation_id, "note": note})
@@ -289,10 +297,9 @@ def approve_po(conn: sqlite3.Connection, run: Run, escalation_id: str, note: str
 @_atomic
 def reject_po(conn: sqlite3.Connection, run: Run, escalation_id: str, note: str) -> ActionResult:
     """Human side: a held PO never reaches the supplier."""
-    po, refusal = _pending_approval(conn, run, escalation_id, "reject_po")
+    po, refusal = _claim_approval(conn, run, escalation_id, "REJECTED", "reject_po")
     if refusal:
         return refusal
-    conn.execute("UPDATE escalations SET status = 'REJECTED' WHERE escalation_id = ?", (escalation_id,))
     conn.execute("UPDATE purchase_orders SET status = 'CANCELLED', notes = ? WHERE po_id = ?",
                  (_append_note(po["notes"], f"Rejected: {note}"), po["po_id"]))
     audit(conn, run.run_id, "human", "PO_REJECTED", po["po_id"], {"escalation_id": escalation_id, "note": note})
