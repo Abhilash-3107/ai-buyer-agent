@@ -73,6 +73,30 @@ def test_invalid_timeout_raises_clear_error(monkeypatch):
         LLMConfig.from_env()
 
 
+def test_max_tokens_is_sent_on_every_request_and_defaults_to_4096():
+    client, sent = fake_client(content="hi")
+    LLMClient(CFG, client=client).chat([{"role": "user", "content": "hi"}])
+    assert sent["max_tokens"] == 4096
+    client, sent = fake_client(content="hi")
+    cfg = LLMConfig(base_url=CFG.base_url, api_key="", model="fake", temperature=None, max_tokens=512)
+    LLMClient(cfg, client=client).chat([{"role": "user", "content": "hi"}], tools=[{"type": "function"}])
+    assert sent["max_tokens"] == 512
+
+
+def test_max_tokens_is_read_from_env(monkeypatch):
+    monkeypatch.setenv("LLM_MAX_TOKENS", "1024")
+    assert LLMConfig.from_env().max_tokens == 1024
+    monkeypatch.delenv("LLM_MAX_TOKENS")
+    assert LLMConfig.from_env().max_tokens == 4096
+
+
+@pytest.mark.parametrize("bad", ["lots", "0", "-5", "1.5"])
+def test_invalid_max_tokens_raises_clear_error(monkeypatch, bad):
+    monkeypatch.setenv("LLM_MAX_TOKENS", bad)
+    with pytest.raises(ValueError, match="LLM_MAX_TOKENS"):
+        LLMConfig.from_env()
+
+
 def test_missing_usage_gives_empty_usage():
     client, _ = fake_client(content="hi", usage=None)
     r = LLMClient(CFG, client=client).chat([{"role": "user", "content": "hi"}])

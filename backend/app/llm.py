@@ -59,6 +59,7 @@ class LLMConfig:
     temperature: float | None
     timeout_s: float = 120.0
     max_retries: int = 2
+    max_tokens: int = 4096
 
     @classmethod
     def from_env(cls) -> LLMConfig:
@@ -74,12 +75,20 @@ class LLMConfig:
             raise ValueError(f"LLM_TIMEOUT_S must be a number of seconds (e.g. 300), got {raw_timeout!r}") from None
         if timeout_s <= 0:
             raise ValueError(f"LLM_TIMEOUT_S must be greater than 0, got {raw_timeout!r}")
+        raw_max = os.getenv("LLM_MAX_TOKENS")
+        try:
+            max_tokens = int(raw_max) if raw_max not in (None, "") else cls.max_tokens
+        except ValueError:
+            raise ValueError(f"LLM_MAX_TOKENS must be a whole number of tokens (e.g. 4096), got {raw_max!r}") from None
+        if max_tokens <= 0:
+            raise ValueError(f"LLM_MAX_TOKENS must be greater than 0, got {raw_max!r}")
         return cls(
             base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
             api_key=os.getenv("LLM_API_KEY", ""),
             model=os.getenv("LLM_MODEL", "gpt-4.1-mini"),
             temperature=temperature,
             timeout_s=timeout_s,
+            max_tokens=max_tokens,
         )
 
     @property
@@ -101,7 +110,7 @@ class LLMClient:
         )
 
     def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> LLMResponse:
-        kwargs: dict[str, Any] = {"model": self.config.model, "messages": messages}
+        kwargs: dict[str, Any] = {"model": self.config.model, "messages": messages, "max_tokens": self.config.max_tokens}
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
