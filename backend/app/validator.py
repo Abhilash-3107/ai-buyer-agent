@@ -7,7 +7,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .calculations import days_of_cover, inbound_arrivals, project_stock, qty_limits
+from .calculations import (
+    days_of_cover,
+    floor_to_case,
+    inbound_arrivals,
+    project_stock,
+    qty_limits,
+)
 from .context import SkuContext
 
 EXCESS_COVER_FACTOR = 2.0  # warn when post-order cover exceeds this x the coverage window
@@ -42,37 +48,41 @@ def _warning(code: str, message: str, **details) -> Violation:
 def validate_purchase(ctx: SkuContext, supplier_id: str, qty: int, daily_demand: float,
                       *, replaces_po_id: str | None = None) -> ValidationResult:
     """With `replaces_po_id`, "change PO X to qty Q" is validated as a fresh PO of Q."""
-    not_found: list[Violation] = []
+    out: list[Violation] = []
     if replaces_po_id is not None:
         if any(p.po_id == replaces_po_id for p in ctx.inbound):
             ctx = ctx.without_po(replaces_po_id)
         else:
-            not_found.append(_error("PO_NOT_FOUND",
-                                    f"{replaces_po_id} is not an open PO for {ctx.node_id} / {ctx.sku}",
-                                    replaces_po_id=replaces_po_id))
+            out.append(_error("PO_NOT_FOUND",
+                              f"{replaces_po_id} is not an open PO for {ctx.node_id} / {ctx.sku}",
+                              replaces_po_id=replaces_po_id))
 
     offer = ctx.offer(supplier_id)
     position = ctx.on_hand + ctx.inbound_qty
     post_cover = days_of_cover(position + qty, daily_demand)
+
+    # Rules that do not depend on the supplier run first, so an unknown supplier does not hide them.
+    if qty <= 0:
+        out.append(_error("QTY_NOT_POSITIVE", f"Quantity must be positive, got {qty}", requested=qty))
+    if qty % ctx.case_pack != 0:
+        out.append(_error("NOT_CASE_MULTIPLE", f"{qty} is not a multiple of the case pack {ctx.case_pack}",
+                          requested=qty, case_pack=ctx.case_pack))
+    if qty > ctx.storage_free:
+        out.append(_error("OVER_STORAGE", f"{qty} units exceed the {ctx.storage_free} units of free {ctx.zone} storage",
+                          requested=qty, free=ctx.storage_free, max_qty=floor_to_case(ctx.storage_free, ctx.case_pack)))
     if offer is None:
-        v = _error("SUPPLIER_NOT_OFFERING", f"{supplier_id} does not offer {ctx.sku}", supplier_id=supplier_id)
-        return ValidationResult(False, (*not_found, v), 0.0, post_cover, 0)
+        out.append(_error("SUPPLIER_NOT_OFFERING", f"{supplier_id} does not offer {ctx.sku}", supplier_id=supplier_id))
+        return ValidationResult(False, tuple(out), 0.0, post_cover, 0)
 
     po_value = qty * offer.unit_cost
     arrival_day = offer.lead_time_days
     limits = qty_limits(ctx, offer, daily_demand)
-    out: list[Violation] = list(not_found)
 
-    if qty <= 0:
-        out.append(_error("QTY_NOT_POSITIVE", f"Quantity must be positive, got {qty}", requested=qty))
     if not offer.is_approved:
         out.append(_error("SUPPLIER_NOT_APPROVED", f"{offer.name} is not an approved supplier", supplier_id=supplier_id))
     if qty < offer.moq:
         out.append(_error("BELOW_MOQ", f"{qty} is below {offer.name}'s MOQ of {offer.moq}",
                           requested=qty, moq=offer.moq))
-    if qty % ctx.case_pack != 0:
-        out.append(_error("NOT_CASE_MULTIPLE", f"{qty} is not a multiple of the case pack {ctx.case_pack}",
-                          requested=qty, case_pack=ctx.case_pack))
     if qty > offer.listed_capacity:
         out.append(_error("OVER_SUPPLIER_CAPACITY", f"{qty} exceeds {offer.name}'s listed capacity {offer.listed_capacity}",
                           requested=qty, capacity=offer.listed_capacity, max_qty=limits.supplier_capacity))
@@ -80,9 +90,6 @@ def validate_purchase(ctx: SkuContext, supplier_id: str, qty: int, daily_demand:
         out.append(_error("OVER_BUDGET",
                           f"PO value ${po_value:,.2f} exceeds the remaining {ctx.category} budget ${ctx.budget_remaining:,.2f}",
                           po_value=po_value, budget_remaining=ctx.budget_remaining, max_qty=limits.budget))
-    if qty > ctx.storage_free:
-        out.append(_error("OVER_STORAGE", f"{qty} units exceed the {ctx.storage_free} units of free {ctx.zone} storage",
-                          requested=qty, free=ctx.storage_free, max_qty=limits.storage))
     if ctx.shelf_life_days is not None and post_cover > ctx.shelf_life_days:
         out.append(_error("OVER_SHELF_LIFE",
                           f"{position + qty} units at {daily_demand:g}/day is {post_cover:.1f} days of cover, "

@@ -28,22 +28,29 @@ class DemandStats:
     promo_active_days: tuple[int, ...]  # last-7 day offsets covered by a promotion
 
 
+def _mean(values) -> float:
+    return statistics.fmean(values) if values else 0.0
+
+
 def demand_stats(ctx: SkuContext) -> DemandStats:
+    """Safe for a new SKU: no sales gives zeros, one sales day gives a flat trend, no forecast gives ratio inf."""
     last7 = ctx.sales[-7:]
     first_day = -len(last7)
-    forecast_daily = statistics.fmean(ctx.forecast[:FORECAST_WINDOW_DAYS])
-    median_7d = statistics.median(last7)
+    forecast_daily = _mean(ctx.forecast[:FORECAST_WINDOW_DAYS])
+    median_7d = statistics.median(last7) if last7 else 0.0
+    y_mean = _mean(last7)
 
-    x_mean = (len(last7) - 1) / 2
-    y_mean = statistics.fmean(last7)
-    trend = (sum((i - x_mean) * (y - y_mean) for i, y in enumerate(last7))
-             / sum((i - x_mean) ** 2 for i in range(len(last7))))
+    trend = 0.0
+    if len(last7) >= 2:
+        x_mean = (len(last7) - 1) / 2
+        trend = (sum((i - x_mean) * (y - y_mean) for i, y in enumerate(last7))
+                 / sum((i - x_mean) ** 2 for i in range(len(last7))))
 
     return DemandStats(
         forecast_daily=forecast_daily,
         mean_7d=y_mean,
         median_7d=median_7d,
-        mean_28d=statistics.fmean(ctx.sales[-28:]),
+        mean_28d=_mean(ctx.sales[-28:]),
         trend_7d=trend,
         ratio_vs_forecast=median_7d / forecast_daily if forecast_daily else math.inf,
         outlier_days=tuple((first_day + i, u) for i, u in enumerate(last7) if u > OUTLIER_FACTOR * median_7d),
@@ -118,16 +125,16 @@ class QtyLimits:
     max_qty: int
 
 
-def _floor_to_case(units: int, case_pack: int) -> int:
+def floor_to_case(units: int, case_pack: int) -> int:
     return max(0, units // case_pack * case_pack)
 
 
 def qty_limits(ctx: SkuContext, offer: SupplierOffer, daily_demand: float) -> QtyLimits:
     limits: dict[str, int | None] = {
-        "budget": _floor_to_case(math.floor(ctx.budget_remaining / offer.unit_cost), ctx.case_pack),
-        "storage": _floor_to_case(ctx.storage_free, ctx.case_pack),
-        "supplier_capacity": _floor_to_case(offer.listed_capacity, ctx.case_pack),
-        "shelf_life": None if ctx.shelf_life_days is None else _floor_to_case(
+        "budget": floor_to_case(math.floor(ctx.budget_remaining / offer.unit_cost), ctx.case_pack),
+        "storage": floor_to_case(ctx.storage_free, ctx.case_pack),
+        "supplier_capacity": floor_to_case(offer.listed_capacity, ctx.case_pack),
+        "shelf_life": None if ctx.shelf_life_days is None else floor_to_case(
             math.floor(daily_demand * ctx.shelf_life_days - (ctx.on_hand + ctx.inbound_qty)), ctx.case_pack),
     }
     binding, max_qty = min(((k, v) for k, v in limits.items() if v is not None), key=lambda kv: kv[1])
