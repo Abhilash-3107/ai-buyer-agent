@@ -6,6 +6,7 @@ another scenario, and every eval run starts from identical data.
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
@@ -39,3 +40,16 @@ def create_empty_db(path: str | Path) -> sqlite3.Connection:
     conn.execute("INSERT INTO meta VALUES ('sim_today', ?)", (SIM_TODAY.isoformat(),))
     conn.commit()
     return conn
+
+
+def current_run_id(conn: sqlite3.Connection) -> str | None:
+    row = conn.execute("SELECT value FROM meta WHERE key = 'run_id'").fetchone()
+    return row[0] if row else None
+
+
+def audit(conn: sqlite3.Connection, run_id: str | None, actor: str, action: str,
+          entity_id: str | None, details: dict) -> None:
+    """Append one row to the audit trail. The caller owns the transaction."""
+    conn.execute(
+        "INSERT INTO audit_log (run_id, actor, action, entity_id, details_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (run_id, actor, action, entity_id, json.dumps(details, default=str), day(0)))
