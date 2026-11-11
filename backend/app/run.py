@@ -7,7 +7,7 @@ from __future__ import annotations
 import sys
 
 from .agent import run_agent
-from .llm import LLMClient
+from .baselines import BaselineClient, make_client
 from .scenarios import SCENARIOS
 from .trace import TraceEvent
 
@@ -50,7 +50,10 @@ def main(argv: list[str]) -> int:
     if len(argv) != 1 or argv[0] not in SCENARIOS:
         print("usage: uv run python -m app.run <scenario id>\n" + "\n".join(f"  {s}" for s in SCENARIOS))
         return 2
-    result = run_agent(argv[0], LLMClient(),
+    client = make_client()
+    if isinstance(client, BaselineClient):
+        print(f"DEMO: baseline policy '{client.name}' scripted replies, not the agent.")
+    result = run_agent(argv[0], client,
                        on_event=lambda e: print(f"{e.seq:>3} t{e.turn:<2} {e.type:<14} {summary(e)}", flush=True))
     d = result.decision
     print(f"\nOutcome:  {result.outcome}")

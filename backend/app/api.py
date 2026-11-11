@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from . import actions, evaluate, runs
 from .agent import run_agent
-from .baselines import BASELINES, BaselineClient
+from .baselines import BaselineClient, make_client
 from .db import connect
 from .llm import LLMClient, LLMConfig
 from .runs import Run
@@ -34,18 +34,7 @@ RUN_ID = re.compile(r"^\d{8}T\d{6}-[0-9a-f]{6}$")  # also keeps user input out o
 LIST_LIMIT = 50
 
 
-# --- the model behind the runs ---------------------------------------------------------------------
-def make_client() -> LLMClient | BaselineClient:
-    """One fresh client per run. LLM_MODEL=baseline:<policy> selects demo mode. Tests replace this function."""
-    model = LLMConfig.from_env().model
-    if not model.startswith("baseline:"):
-        return LLMClient()
-    name = model.removeprefix("baseline:")
-    if name not in BASELINES:
-        raise RuntimeError(f"unknown baseline {name!r}; choose one of {', '.join(sorted(BASELINES))}")
-    return BaselineClient(name)
-
-
+# --- the model behind the runs (make_client comes from baselines; tests patch api.make_client) ------
 def _model_name(client: LLMClient | BaselineClient) -> str:
     return f"baseline:{client.name}" if isinstance(client, BaselineClient) else client.config.model
 
