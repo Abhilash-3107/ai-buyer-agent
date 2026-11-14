@@ -55,9 +55,10 @@ def test_allowed_suppliers_are_approved_and_sell_the_sku(sid):
                                 (supplier, sku)).fetchone(), (supplier, sku)
 
 
-# The engine's recommendation is deliberately wrong in these (fixed standing order / raw 20 days x 40,
-# not rounded to the case pack or MOQ), so they are the only ones allowed to break pack/MOQ rules.
-WRONG_BY_DESIGN = {"S1-MODIFY", "S1-REJECT", "S1-INVESTIGATE"}
+# The engine's recommendation is deliberately wrong in these (raw 20 days x 40, not rounded to the case
+# pack), so they are the only ones allowed to break pack/MOQ rules. S1-REJECT's standing order is a
+# valid PO on its own: the only reason to reject it is that the store is already overstocked.
+WRONG_BY_DESIGN = {"S1-MODIFY", "S1-INVESTIGATE"}
 
 
 @pytest.mark.parametrize("sid", [s for s in SCENARIOS if s not in WRONG_BY_DESIGN])

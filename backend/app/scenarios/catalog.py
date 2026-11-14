@@ -124,9 +124,9 @@ def _s1_accept(b: Builder) -> None:
 @scenario(
     id="S1-REJECT", group=1,
     title="Already overstocked - standing order should not fire",
-    situation="The replenishment engine recommends buying 400 units of Instant Noodles 70g (SKU-1003) "
+    situation="The replenishment engine recommends buying 480 units of Instant Noodles 70g (SKU-1003) "
               "from Metro Wholesale for Dark Store North. Review the recommendation.",
-    summary="A standing order for 400 noodles fired even though the store already has 35 days of stock. Nothing should be bought.",
+    summary="A standing order for 480 noodles fired even though the store already has 35 days of stock. Nothing should be bought.",
     trigger={"type": "RECOMMENDATION_REVIEW", "rec_id": "REC-1003"},
     expected=Expected(
         decision=REJECT,
@@ -134,7 +134,8 @@ def _s1_accept(b: Builder) -> None:
         new_buy_qty=(0, 0),
         worked_example=(
             "target = 20/day x 15 days = 300. position = 500 on hand + 200 inbound = 700 (35 days of cover). "
-            "net need = 0. The engine fired a fixed standing order regardless of stock."
+            "net need = 0. The engine fired a fixed standing order (10 cases, exactly the MOQ) regardless of stock; "
+            "buying it would push cover to ~59 days."
         ),
     ),
 )
@@ -147,8 +148,8 @@ def _s1_reject(b: Builder) -> None:
     b.forecast(N, "SKU-1003", per_day=20)
     b.po("PO-1301", "SUP-METRO", N, "SKU-1003", 200, 0.40, status="CONFIRMED", confirmed=200, arrives_in=2)
     b.budget("Pantry", amount=20000, spent=9000)
-    b.recommendation("REC-1003", N, "SKU-1003", "SUP-METRO", 400,
-                     reason="Standing weekly order: 400 units every Monday.")
+    b.recommendation("REC-1003", N, "SKU-1003", "SUP-METRO", 480,
+                     reason="Standing weekly order: 480 units (10 cases) every Monday.")
 
 
 @scenario(
