@@ -1,4 +1,6 @@
 """Builds each scenario DB and checks the hand-worked examples end to end."""
+from dataclasses import replace
+
 import pytest
 
 from app.purchasing.calculations import (
@@ -125,14 +127,14 @@ def test_s3_sustained_spike():
     assert res.ok
 
 
-def test_s3_one_off_spike():
-    ctx = ctx_for("S3-ONE-OFF-SPIKE", "SKU-3002")
+def test_a_single_bulk_day_is_an_outlier_and_the_median_ignores_it():
+    """The demand statistics the agent reads: one 260-unit day drags the mean, not the median."""
+    base = ctx_for("S3-PROMO-ENDING", "SKU-3003")
+    ctx = replace(base, promotions=(), sales=(28, 27, 28, 33, 28, 28, 260))
     stats = demand_stats(ctx)
     assert stats.outlier_days == ((-1, 260),)
     assert stats.median_7d == 28
     assert stats.mean_7d == pytest.approx(61.7, abs=0.1)
-    req = plan_order(ctx, "SUP-METRO", stats.median_7d).requirement
-    assert (req.target, req.position, req.net_need) == (420, 600, 0)
 
 
 def test_s3_promo_ending():

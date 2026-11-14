@@ -31,8 +31,8 @@ def test_without_a_path_nothing_is_written(tmp_path, monkeypatch):
 def test_a_run_writes_its_trace_next_to_its_database(tmp_path, use_settings):
     use_settings(runs_dir=tmp_path)
     seen = []
-    result = run_agent("S3-ONE-OFF-SPIKE", scripted_llm([reply(submit("ACCEPT", 0, 30.0))]), on_event=seen.append)
-    assert result.trace_path == tmp_path / f"S3-ONE-OFF-SPIKE__{result.run.run_id}.trace.jsonl"
+    result = run_agent("S3-PROMO-ENDING", scripted_llm([reply(submit("ACCEPT", 0, 30.0))]), on_event=seen.append)
+    assert result.trace_path == tmp_path / f"S3-PROMO-ENDING__{result.run.run_id}.trace.jsonl"
     assert result.run.path.parent == result.trace_path.parent
     lines = [json.loads(line) for line in result.trace_path.read_text().splitlines()]
     assert [line["seq"] for line in lines] == list(range(1, len(lines) + 1))
@@ -40,7 +40,7 @@ def test_a_run_writes_its_trace_next_to_its_database(tmp_path, use_settings):
 
 
 def test_an_in_memory_run_has_no_trace_file():
-    result = run_agent("S3-ONE-OFF-SPIKE", scripted_llm([reply(submit("ACCEPT", 0, 30.0))]), in_memory=True)
+    result = run_agent("S3-PROMO-ENDING", scripted_llm([reply(submit("ACCEPT", 0, 30.0))]), in_memory=True)
     assert result.trace_path is None
 
 
@@ -49,7 +49,7 @@ def test_trace_lines_are_strict_json_even_for_infinite_model_arguments(tmp_path,
     script = [reply(call("get_budget", '{"sku": "SKU-1002", "a": Infinity, "b": [-Infinity, NaN]}')),
               reply(submit("ACCEPT", 0, 30.0))]
     seen = []
-    result = run_agent("S3-ONE-OFF-SPIKE", scripted_llm(script), on_event=seen.append)
+    result = run_agent("S3-PROMO-ENDING", scripted_llm(script), on_event=seen.append)
 
     def reject(constant):
         raise AssertionError(f"non-strict JSON constant {constant}")

@@ -188,7 +188,7 @@ def test_bad_calls_are_fed_back_and_the_run_continues():
               call("submit_decision", {"decision": "MAYBE"})),
         reply(submit("ACCEPT", 0, 30.0)),
     ]
-    result, events = run(script, "S3-ONE-OFF-SPIKE")
+    result, events = run(script, "S3-PROMO-ENDING")
     errors = [e.data["result"]["error"] for e in events if e.type == "tool_result" and e.turn == 1 and e.data["by"] == "agent"]
     assert "Invalid JSON arguments" in errors[0] and "Unknown tool 'buy_everything'" in errors[1]
     assert "Invalid arguments for submit_decision" in errors[2] and "decision" in errors[2]
@@ -234,7 +234,7 @@ def test_every_text_only_reply_gets_a_nudge():
               reply(submit("ACCEPT", 0, 30.0))]
     llm = scripted_llm(script)
     events = []
-    result = run_agent("S3-ONE-OFF-SPIKE", llm, in_memory=True, on_event=events.append)
+    result = run_agent("S3-PROMO-ENDING", llm, in_memory=True, on_event=events.append)
     assert nudges(events) == [1, 2, 3]
     assert llm.sent[1][-1] == {"role": "user", "content": NUDGE_TEXT}
     assert llm.sent[3][-1] == {"role": "user", "content": NUDGE_TEXT}
@@ -243,20 +243,20 @@ def test_every_text_only_reply_gets_a_nudge():
 
 def test_empty_reply_is_stored_with_empty_content_not_null():
     llm = scripted_llm([reply(), reply(submit("ACCEPT", 0, 30.0))])
-    run_agent("S3-ONE-OFF-SPIKE", llm, in_memory=True)
+    run_agent("S3-PROMO-ENDING", llm, in_memory=True)
     assert llm.sent[1][-2] == {"role": "assistant", "content": ""}
 
 
 def test_submit_decision_written_as_fenced_json_is_recovered_and_verified():
     result, events = run([reply(text=f'```json\n{{"name": "submit_decision", "arguments": {SUBMIT_JSON}}}\n```')],
-                         "S3-ONE-OFF-SPIKE")
+                         "S3-PROMO-ENDING")
     assert result.outcome == "DECIDED" and result.verification.passed and result.decision.decision == "ACCEPT"
     recovered = [e.data for e in events if e.type == "recovered_tool_call"]
     assert recovered[0]["name"] == "submit_decision" and recovered[0]["call_id"] == "recovered-1"
     assert nudges(events) == []
     # the bare decision dict (no name wrapper) is treated as submit_decision arguments too
     llm = scripted_llm([reply(text=f"```json\n{SUBMIT_JSON}\n```")])
-    result = run_agent("S3-ONE-OFF-SPIKE", llm, in_memory=True)
+    result = run_agent("S3-PROMO-ENDING", llm, in_memory=True)
     assert result.outcome == "DECIDED" and result.verification.passed
 
 
@@ -280,7 +280,7 @@ def test_unrecoverable_json_is_nudged_not_executed():
     llm = scripted_llm([reply(text=two), reply(text=unknown), reply(text="just prose"),
                         reply(submit("ACCEPT", 0, 30.0))])
     events = []
-    result = run_agent("S3-ONE-OFF-SPIKE", llm, in_memory=True, on_event=events.append)
+    result = run_agent("S3-PROMO-ENDING", llm, in_memory=True, on_event=events.append)
     assert not [e for e in events if e.type == "recovered_tool_call"]
     assert nudges(events) == [1, 2, 3]
     assert [llm.sent[i][-1]["content"] for i in (1, 2, 3)] == [JSON_NUDGE_TEXT, JSON_NUDGE_TEXT, NUDGE_TEXT]
@@ -361,7 +361,7 @@ def test_growing_or_missing_usage_does_not_trip_the_guard():
               reply(call("get_budget", {"sku": "SKU-1002"}), tokens_in=None),
               reply(call("get_budget", {"sku": "SKU-1002"}), tokens_in=3500),
               reply(submit("ACCEPT", 0), tokens_in=3500)]
-    result, _ = run(script, "S3-ONE-OFF-SPIKE")
+    result, _ = run(script, "S3-PROMO-ENDING")
     assert result.outcome == "DECIDED"
 
 

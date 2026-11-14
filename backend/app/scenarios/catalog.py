@@ -333,36 +333,6 @@ def _s3_spike(b: Builder) -> None:
 
 
 @scenario(
-    id="S3-ONE-OFF-SPIKE", group=3,
-    title="Average is inflated by a single bulk order - do not overreact",
-    situation="Demand alert: 7-day average sales of Bottled Water 1L (SKU-3002) at Dark Store North are "
-              "~2x the forecast. PO-3002 is open. Check whether the purchasing plan needs to change.",
-    summary="Bottled water looks 2x the forecast, but only because of one bulk order yesterday. Normal days are flat, so change nothing.",
-    trigger={"type": "DEMAND_ALERT", "node_id": N, "sku": "SKU-3002"},
-    expected=Expected(
-        decision=ACCEPT,
-        required_info=("sales_history", "forecast", "inventory", "open_pos"),
-        new_buy_qty=(0, 0),
-        worked_example=(
-            "Daily sales are ~28 every day except yesterday's 260 (one bulk order). Mean of 7 days = ~62, "
-            "median = ~28. Using the median: target ~420-450 vs position 300 + 300 = 600 -> no change. "
-            "Buying off the mean would add ~330 unneeded units."
-        ),
-    ),
-)
-def _s3_oneoff(b: Builder) -> None:
-    base_world(b)
-    b.product("SKU-3002", "Bottled Water 1L", "Beverages", case_pack=12)
-    b.offer("SUP-METRO", "SKU-3002", cost=0.60, moq=120, lead=5, primary=True)
-    b.offer("SUP-QUICK", "SKU-3002", cost=0.70, moq=48, lead=2)
-    b.stock(N, "SKU-3002", on_hand=300)
-    b.sales(N, "SKU-3002", steady(30, 27, seed=32) + [260])
-    b.forecast(N, "SKU-3002", per_day=30)
-    b.po("PO-3002", "SUP-METRO", N, "SKU-3002", 300, 0.60, status="SUBMITTED", arrives_in=4)
-    b.budget("Beverages", amount=10000, spent=4000)
-
-
-@scenario(
     id="S3-PROMO-ENDING", group=3,
     title="Spike is explained by a promotion that ends tomorrow",
     situation="Demand alert: 7-day average sales of Energy Drink 250ml (SKU-3003) at Dark Store North are "
