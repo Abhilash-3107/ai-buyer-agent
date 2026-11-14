@@ -1,0 +1,920 @@
+{
+  "name": "buyer-qwen3.5-4b",
+  "kind": "model",
+  "repeats": 3,
+  "temperature": 0.0,
+  "agent_version": {
+    "git": "fec40a7",
+    "prompt_sha": "2cf70775b782"
+  },
+  "cards": [
+    {
+      "scenario_id": "S1-MODIFY",
+      "run_id": "20261114T122714-705168",
+      "model": "buyer-qwen3.5-4b",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "192 units, expected 168-240"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 192,
+      "turns": 4,
+      "tool_calls": 12,
+      "blocked_writes": 0,
+      "tokens_in": 19591,
+      "tokens_out": 3046,
+      "latency_s": 208.722,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-MODIFY",
+      "run_id": "20261114T123043-815edf",
+      "model": "buyer-qwen3.5-4b",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "192 units, expected 168-240"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 192,
+      "turns": 4,
+      "tool_calls": 12,
+      "blocked_writes": 0,
+      "tokens_in": 19591,
+      "tokens_out": 3046,
+      "latency_s": 198.828,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-MODIFY",
+      "run_id": "20261114T123402-3ee504",
+      "model": "buyer-qwen3.5-4b",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "192 units, expected 168-240"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 192,
+      "turns": 4,
+      "tool_calls": 12,
+      "blocked_writes": 0,
+      "tokens_in": 19591,
+      "tokens_out": 3046,
+      "latency_s": 199.61,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-ACCEPT",
+      "run_id": "20261114T123722-10ec8f",
+      "model": "buyer-qwen3.5-4b",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided ACCEPT, expected ACCEPT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": false,
+          "reason": "never read: forecast"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "480 units, expected 456-504"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 480,
+      "turns": 5,
+      "tool_calls": 12,
+      "blocked_writes": 0,
+      "tokens_in": 23665,
+      "tokens_out": 2357,
+      "latency_s": 152.663,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-ACCEPT",
+      "run_id": "20261114T123954-236fa7",
+      "model": "buyer-qwen3.5-4b",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided ACCEPT, expected ACCEPT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": false,
+          "reason": "never read: forecast"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "480 units, expected 456-504"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 480,
+      "turns": 5,
+      "tool_calls": 12,
+      "blocked_writes": 0,
+      "tokens_in": 23665,
+      "tokens_out": 2357,
+      "latency_s": 152.579,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-ACCEPT",
+      "run_id": "20261114T124227-b4839f",
+      "model": "buyer-qwen3.5-4b",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided ACCEPT, expected ACCEPT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": false,
+          "reason": "never read: forecast"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "480 units, expected 456-504"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 480,
+      "turns": 5,
+      "tool_calls": 12,
+      "blocked_writes": 0,
+      "tokens_in": 23665,
+      "tokens_out": 2357,
+      "latency_s": 150.38,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-REJECT",
+      "run_id": "20261114T124457-7bcfa5",
+      "model": "buyer-qwen3.5-4b",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided REJECT, expected REJECT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": false,
+          "reason": "never read: forecast"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "0 units, expected 0"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "REJECT",
+      "new_buy_units": 0,
+      "turns": 4,
+      "tool_calls": 11,
+      "blocked_writes": 0,
+      "tokens_in": 18018,
+      "tokens_out": 5903,
+      "latency_s": 362.637,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-REJECT",
+      "run_id": "20261114T125100-ba967b",
+      "model": "buyer-qwen3.5-4b",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided REJECT, expected REJECT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": false,
+          "reason": "never read: forecast"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "0 units, expected 0"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "REJECT",
+      "new_buy_units": 0,
+      "turns": 4,
+      "tool_calls": 11,
+      "blocked_writes": 0,
+      "tokens_in": 18018,
+      "tokens_out": 5903,
+      "latency_s": 357.427,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-REJECT",
+      "run_id": "20261114T125657-0636e3",
+      "model": "buyer-qwen3.5-4b",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided REJECT, expected REJECT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": false,
+          "reason": "never read: forecast"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "0 units, expected 0"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "REJECT",
+      "new_buy_units": 0,
+      "turns": 4,
+      "tool_calls": 11,
+      "blocked_writes": 0,
+      "tokens_in": 18018,
+      "tokens_out": 5903,
+      "latency_s": 361.124,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-INVESTIGATE",
+      "run_id": "20261114T130259-9200b4",
+      "model": "buyer-qwen3.5-4b",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided INVESTIGATE, expected INVESTIGATE"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 3 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "0 units, expected 0; INVESTIGATION escalation raised"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "INVESTIGATE",
+      "new_buy_units": 0,
+      "turns": 7,
+      "tool_calls": 15,
+      "blocked_writes": 0,
+      "tokens_in": 39694,
+      "tokens_out": 3292,
+      "latency_s": 232.449,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 2
+    },
+    {
+      "scenario_id": "S1-INVESTIGATE",
+      "run_id": "20261114T130651-2555f8",
+      "model": "buyer-qwen3.5-4b",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided INVESTIGATE, expected INVESTIGATE"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 3 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "0 units, expected 0; INVESTIGATION escalation raised"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "INVESTIGATE",
+      "new_buy_units": 0,
+      "turns": 7,
+      "tool_calls": 15,
+      "blocked_writes": 0,
+      "tokens_in": 39694,
+      "tokens_out": 3292,
+      "latency_s": 234.218,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 2
+    },
+    {
+      "scenario_id": "S1-INVESTIGATE",
+      "run_id": "20261114T131045-4249be",
+      "model": "buyer-qwen3.5-4b",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided INVESTIGATE, expected INVESTIGATE"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 3 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "0 units, expected 0; INVESTIGATION escalation raised"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "INVESTIGATE",
+      "new_buy_units": 0,
+      "turns": 7,
+      "tool_calls": 15,
+      "blocked_writes": 0,
+      "tokens_in": 39694,
+      "tokens_out": 3292,
+      "latency_s": 233.161,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 2
+    },
+    {
+      "scenario_id": "S2-SOURCE-ELSEWHERE",
+      "run_id": "20261114T131438-d1c105",
+      "model": "buyer-qwen3.5-4b",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": false,
+          "reason": "no decision was submitted (run ended CONTEXT_TRUNCATED), expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": false,
+          "reason": "run did not finish (CONTEXT_TRUNCATED)"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": false,
+          "reason": "the run ended CONTEXT_TRUNCATED without submit_decision"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": false,
+      "outcome": "CONTEXT_TRUNCATED",
+      "decision": null,
+      "new_buy_units": 500,
+      "turns": 10,
+      "tool_calls": 13,
+      "blocked_writes": 0,
+      "tokens_in": 56895,
+      "tokens_out": 12691,
+      "latency_s": 804.039,
+      "verifier_findings": [
+        "NO_DECISION: The run ended without a submit_decision call."
+      ],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S2-SOURCE-ELSEWHERE",
+      "run_id": "20261114T132803-74cfee",
+      "model": "buyer-qwen3.5-4b",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": false,
+          "reason": "no decision was submitted (run ended CONTEXT_TRUNCATED), expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": false,
+          "reason": "run did not finish (CONTEXT_TRUNCATED)"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": false,
+          "reason": "the run ended CONTEXT_TRUNCATED without submit_decision"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": false,
+      "outcome": "CONTEXT_TRUNCATED",
+      "decision": null,
+      "new_buy_units": 500,
+      "turns": 10,
+      "tool_calls": 13,
+      "blocked_writes": 0,
+      "tokens_in": 56895,
+      "tokens_out": 12691,
+      "latency_s": 802.011,
+      "verifier_findings": [
+        "NO_DECISION: The run ended without a submit_decision call."
+      ],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    }
+  ]
+}

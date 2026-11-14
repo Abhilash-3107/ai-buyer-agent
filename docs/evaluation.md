@@ -131,24 +131,27 @@ A scenario passes only when every repeat passes.
 | Name | Kind | Runs | Scenarios passed | Runs passed | decision | information | constraints | action | validation | recovery |
 |---|---|---|---|---|---|---|---|---|---|---|
 | [gpt-6-luna](eval/gpt-6-luna.md) | model | 33 (11 x 3) | 9/11 | 29/33 | 30/33 | 33/33 | 33/33 | 31/33 | 32/33 | 6/6 |
+| [buyer-qwen3.5-4b](eval/buyer-qwen3.5-4b.md) | model, partial | 14 (5 of 11 scenarios) | 2/5 | 6/14 | 12/14 | 8/14 | 14/14 | 12/14 | 12/14 | n/a |
 | [rubber_stamp](eval/rubber_stamp.md) | baseline | 11 | 0/11 | 0/11 | 3/11 | 0/11 | 11/11 | 3/11 | 5/11 | 0/4 |
 | [do_nothing](eval/do_nothing.md) | baseline | 11 | 0/11 | 0/11 | 1/11 | 0/11 | 11/11 | 3/11 | 4/11 | n/a |
 
 Runs passed per scenario:
 
-| Scenario | gpt-6-luna | rubber_stamp | do_nothing |
-|---|---|---|---|
-| S1-MODIFY | 3/3 | 0/1 | 0/1 |
-| S1-ACCEPT | 3/3 | 0/1 | 0/1 |
-| S1-REJECT | 3/3 | 0/1 | 0/1 |
-| S1-INVESTIGATE | 3/3 | 0/1 | 0/1 |
-| S2-SOURCE-ELSEWHERE | 3/3 | 0/1 | 0/1 |
-| S2-ACCEPT-SHORT | 3/3 | 0/1 | 0/1 |
-| S2-ALT-ALSO-SHORT | 3/3 | 0/1 | 0/1 |
-| S3-SUSTAINED-SPIKE | 3/3 | 0/1 | 0/1 |
-| S3-PROMO-ENDING | 0/3 | 0/1 | 0/1 |
-| S4-BUDGET | 2/3 | 0/1 | 0/1 |
-| S4-MOQ-VS-SHELF-LIFE | 3/3 | 0/1 | 0/1 |
+| Scenario | gpt-6-luna | buyer-qwen3.5-4b | rubber_stamp | do_nothing |
+|---|---|---|---|---|
+| S1-MODIFY | 3/3 | 3/3 | 0/1 | 0/1 |
+| S1-ACCEPT | 3/3 | 0/3 | 0/1 | 0/1 |
+| S1-REJECT | 3/3 | 0/3 | 0/1 | 0/1 |
+| S1-INVESTIGATE | 3/3 | 3/3 | 0/1 | 0/1 |
+| S2-SOURCE-ELSEWHERE | 3/3 | 0/2 | 0/1 | 0/1 |
+| S2-ACCEPT-SHORT | 3/3 | - | 0/1 | 0/1 |
+| S2-ALT-ALSO-SHORT | 3/3 | - | 0/1 | 0/1 |
+| S3-SUSTAINED-SPIKE | 3/3 | - | 0/1 | 0/1 |
+| S3-PROMO-ENDING | 0/3 | - | 0/1 | 0/1 |
+| S4-BUDGET | 2/3 | - | 0/1 | 0/1 |
+| S4-MOQ-VS-SHELF-LIFE | 3/3 | - | 0/1 | 0/1 |
+
+The buyer-qwen3.5-4b evaluation was stopped after 14 runs to save time (each run takes about 5 minutes on a laptop), so `-` marks scenarios it never reached.
 <!-- RESULTS:END -->
 
 How to read the table:
@@ -250,6 +253,25 @@ Those two bought the full 396 before submitting and never needed the new finding
 The third run is the one that exercised it: it escalated and bought nothing, the new finding refused the submission, and the agent then bought, which the old verifier never made it do.
 But it bought only 120 units, the minimum order the finding named, and was refused again for the $1,680 still unspent (run `20261114T131029-23f0ad`).
 Naming the smallest order anchored the model on it; a finding that states only the unspent budget, and leaves the quantity to `plan_order`, is the obvious next change.
+
+### 5. The small local model: right calls, and a guard that misfired (buyer-qwen3.5-4b)
+
+The local model ran 14 of the planned 33 runs before the evaluation was stopped to save time.
+It ran under the verifier from before finding 4's change, which cannot affect these results: none of its 12 finished runs raised a budget escalation, and the 2 that did never submitted a decision.
+
+On recommendation review it made the right decision with the right quantity in all 12 runs, including 192 units on S1-MODIFY and an `INVESTIGATION` on S1-INVESTIGATE.
+S1-ACCEPT and S1-REJECT still fail, every time on `information`: it never called `get_forecast`.
+That is partly a limit of the check.
+`get_sales_history` also returns the 14-day forecast mean in its demand statistics, so the model did see the number it needed.
+The check counts the forecast category only when `get_forecast` itself is called; counting a category as read when its key figure arrives through another tool would be fairer.
+
+On S2-SOURCE-ELSEWHERE it ordered 500 units from QuickSupply to cover a 250-unit gap (the band is 90 to 220), filed a `BUDGET_INCREASE` for what was an approval limit, and claimed 250 new units.
+The verifier caught the claim (the database expects 500).
+The model then spent two whole 4,096-token replies reasoning without calling a tool.
+On the second, the server reported 7,006 input tokens against 7,013 the turn before, and the truncation guard from finding 1 ended the run as `CONTEXT_TRUNCATED`.
+That label is wrong: 7,000 tokens is far inside the 32,768-token window, and the small drop most likely comes from the chat template dropping earlier reasoning text once a new user message arrives.
+The guard should flag only a known context size or a sharp drop, not a few tokens.
+The score is unaffected, because 500 units is outside the band either way.
 
 ## Run the same evaluation on a model
 

@@ -305,6 +305,7 @@ A scenario passes only when every repeat passes.
 | Name | Kind | Runs | Scenarios passed | Runs passed | decision | information | constraints | action | validation | recovery |
 |---|---|---|---|---|---|---|---|---|---|---|
 | [gpt-6-luna](docs/eval/gpt-6-luna.md) | model | 33 (11 x 3) | 9/11 | 29/33 | 30/33 | 33/33 | 33/33 | 31/33 | 32/33 | 6/6 |
+| [buyer-qwen3.5-4b](docs/eval/buyer-qwen3.5-4b.md) | model, partial | 14 (5 of 11 scenarios) | 2/5 | 6/14 | 12/14 | 8/14 | 14/14 | 12/14 | 12/14 | n/a |
 | [rubber_stamp](docs/eval/rubber_stamp.md) | baseline | 11 | 0/11 | 0/11 | 3/11 | 0/11 | 11/11 | 3/11 | 5/11 | 0/4 |
 | [do_nothing](docs/eval/do_nothing.md) | baseline | 11 | 0/11 | 0/11 | 1/11 | 0/11 | 11/11 | 3/11 | 4/11 | n/a |
 
@@ -312,6 +313,8 @@ The hosted model passes 9 of 11 scenarios on every repeat, and both baselines pa
 It fails S3-PROMO-ENDING in every repeat: it names the promotion that ends tomorrow, then orders at the promotional rate.
 S4-BUDGET passes in 2 of 3 runs; the third escalated the budget shortfall, bought only after the verifier pushed back, and bought too little.
 Both are judgement failures, not rule breaks: `constraints` is 33 of 33.
+The local 4-billion-parameter model was evaluated on 5 of the 11 scenarios before the run was stopped (about 5 minutes per run on a laptop).
+It made the right decision with the right quantity in all 12 recommendation-review runs, and its failures are a skipped forecast read and an oversized order after a short shipment.
 [docs/evaluation.md](docs/evaluation.md#what-the-real-runs-taught-us) walks through both.
 <!-- RESULTS:END -->
 
