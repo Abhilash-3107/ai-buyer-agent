@@ -32,15 +32,10 @@ export interface Generation {
   latency: number | null;
 }
 
-/** How the run used the tools it was offered: calls the model made, and what the harness preloaded. */
-export interface ToolUse {
-  calls: Record<string, number>;
-  preloaded: Set<string>;
-}
-
 export type NodeType = "agent" | "span" | "generation" | "tool" | "guardrail" | "event";
 
-/** One node of the trace tree: the run, the preload span, a model call, a tool run, or a harness check or event. */
+/** One node of the trace tree: the run, a model call, a tool run, or a harness check or event.
+    Runs saved before phase 9 also have a "Preload context" span of reads the code did itself. */
 export interface TraceNode {
   id: string; // derived from the event seq, so selection and expansion survive new events
   type: NodeType;
@@ -49,7 +44,7 @@ export interface TraceNode {
   start: number; // seconds since the run started
   end: number | null; // null while it runs
   tokens?: { in: number; out: number };
-  requestedBy?: string; // "LLM call 3" for a model's tool call, "Code" for a preloaded read
+  requestedBy?: string; // "LLM call 3" for a model's tool call, "Code" for a read the harness did in an old run
   recovered?: boolean; // the model wrote this call as text and the harness read it from there
   input?: unknown;
   output?: unknown;
@@ -57,7 +52,6 @@ export interface TraceNode {
   detail?: string; // the harness's sentence for a check or event
   items?: { code?: string; message: string }[]; // violations or findings
   gen?: Generation;
-  use?: ToolUse;
   children: TraceNode[];
 }
 
@@ -67,7 +61,6 @@ const GATES = ["approval", "supplier"]; // steps that are something happening, n
 
 export function buildTree(events: TraceEvent[], finished = events.some((e) => e.type === "run_finished")): TraceNode {
   const root: TraceNode = { id: "root", type: "agent", name: "Run", summary: { text: "Running", tone: "neutral" }, start: 0, end: null, children: [] };
-  const use: ToolUse = { calls: {}, preloaded: new Set() };
   const generations: Generation[] = [];
   const genNodes: TraceNode[] = [];
   const pending: { call: Call; node: TraceNode }[] = [];
@@ -90,7 +83,7 @@ export function buildTree(events: TraceEvent[], finished = events.some((e) => e.
       responded: false, text: "", toolCalls: [], finishReason: null, tokensIn: null, tokensOut: null, latency: null,
     };
     const node: TraceNode = {
-      id: `g${seq}`, type: "generation", name: `LLM call ${gen.n}`, gen, use, start: ts, end: null, children: [],
+      id: `g${seq}`, type: "generation", name: `LLM call ${gen.n}`, gen, start: ts, end: null, children: [],
       summary: finished ? { text: "No response", tone: "warn" } : { text: "Waiting for the model", tone: "neutral" },
     };
     generations.push(gen);
@@ -112,13 +105,11 @@ export function buildTree(events: TraceEvent[], finished = events.some((e) => e.
         node.summary = resultSummary(call);
         if (call.by === "agent") {
           const gen = genNodes[genNodes.length - 1];
-          use.calls[call.name] = (use.calls[call.name] ?? 0) + 1;
           node.requestedBy = gen?.name;
           node.recovered = !!call.callId && recovered.has(call.callId);
           (gen ?? root).children.push(node);
         } else {
-          use.preloaded.add(call.name);
-          node.requestedBy = "Code";
+          node.requestedBy = "Code"; // only runs saved before phase 9 have harness reads
           if (!preload) {
             preload = { id: "preload", type: "span", name: "Preload context", requestedBy: "Code", start: e.ts, end: null, children: [] };
             root.children.push(preload);

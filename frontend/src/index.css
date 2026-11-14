@@ -211,6 +211,33 @@ li:focus-visible > .node-row { outline: 2px solid var(--accent); outline-offset:
 .tool p { margin: 4px 0 0 20px; font-size: 13px; line-height: 18px; }
 .tool pre { margin: 4px 0 4px 20px; padding: 8px 10px; max-height: 240px; overflow: auto; background: var(--raised); border-radius: 6px; font: 400 12px/18px var(--mono); white-space: pre-wrap; word-break: break-word; }
 .trace-text { white-space: pre-wrap; max-width: 80ch; }
+
+/* A model call's messages, Langfuse style: one collapsible block per message, tools first. */
+.msgs { display: grid; gap: 6px; min-width: 0; }
+.msg { min-width: 0; border: 1px solid var(--border); border-left: 3px solid var(--control); border-radius: var(--radius-control); background: var(--surface); }
+.msg.system { border-left-color: var(--muted); }
+.msg.user { border-left-color: var(--accent); }
+.msg.assistant { border-left-color: var(--positive); }
+.msg.tool { border-left-color: var(--warning); }
+.msg.tools { border-left-color: var(--text); }
+.msg > summary { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 10px; list-style: none; cursor: pointer; font-size: 13px; line-height: 18px; }
+.msg > summary::-webkit-details-marker { display: none; }
+.msg > summary::before { content: ""; flex: none; width: 12px; height: 12px; background: var(--muted); -webkit-mask: var(--chevron) center / 12px no-repeat; mask: var(--chevron) center / 12px no-repeat; transition: transform 150ms var(--ease-out); }
+.msg[open] > summary::before { transform: rotate(90deg); }
+.msg > summary > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-role { flex: none; font-weight: 600; }
+.msg-calls { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.msg .node-chip { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: var(--accent); box-shadow: none; }
+.msg-body { display: grid; gap: 6px; padding: 0 10px 8px 30px; min-width: 0; }
+.msg-body pre { margin: 0; padding: 8px 10px; max-height: 60svh; overflow: auto; background: var(--raised); border-radius: 6px; font: 400 12px/18px var(--mono); white-space: pre-wrap; word-break: break-word; }
+.msg-body > p { margin: 0; font-size: 13px; }
+.msg-call { min-width: 0; font-size: 13px; }
+.msg-call pre { margin-top: 4px; }
+.msg-more { justify-self: start; font-size: var(--fs-small); }
+.msg-body.tool-list { padding-top: 4px; }
+.seg { display: inline-flex; margin-left: auto; padding: 2px; border-radius: var(--radius-control); background: var(--raised); }
+.seg button { padding: 2px 10px; border: 0; border-radius: 4px; background: none; color: var(--muted); font-size: var(--fs-small); line-height: 18px; font-weight: 500; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--border); }
 .chev { width: 12px; height: 12px; flex: none; color: var(--muted); transition: transform 150ms var(--ease-out); }
 .chev.open { transform: rotate(90deg); }
 .call-name { font-family: var(--mono); font-size: 13px; font-weight: 500; }

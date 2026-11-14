@@ -74,21 +74,6 @@ export function demoLabel(model: string): string {
   return `Demo: ${policy} policy`;
 }
 
-const PRELOAD_NAMES: Record<string, string> = {
-  get_recommendation: "recommendation",
-  get_product: "product",
-  get_inventory: "inventory",
-  get_purchase_orders: "open POs",
-  get_forecast: "forecast",
-  get_sales_history: "sales",
-  get_promotions: "promotions",
-  get_suppliers: "suppliers",
-  get_budget: "budget",
-  get_storage: "storage",
-  get_supplier_events: "supplier events",
-};
-export const preloadName = (tool: string) => PRELOAD_NAMES[tool] ?? tool.replace(/^get_/, "").replaceAll("_", " ");
-
 export const BASELINE_NOTES: Record<string, string> = {
   rubber_stamp: "Does what the trigger implies without thinking, and always says accept.",
   do_nothing: "Never writes anything and rejects every trigger.",

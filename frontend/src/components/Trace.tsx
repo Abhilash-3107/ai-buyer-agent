@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import type { ChatMessage, RunSummary, TraceEvent } from "../types";
 import type { Connection } from "../hooks/useRun";
-import { argEntries, buildTree, isId, toolGroup, type Generation as Gen, type NodeType, type ToolUse, type TraceNode } from "../lib/trace";
+import { argEntries, buildTree, isId, toolGroup, type Generation as Gen, type NodeType, type TraceNode } from "../lib/trace";
 import { compact, count, duration, plural } from "../lib/format";
 import { humanize, type Tone } from "../lib/words";
 import { Chevron } from "./Icons";
@@ -27,7 +27,8 @@ function Args({ args }: { args: Record<string, unknown> }) {
   );
 }
 
-const ROLES: Record<string, string> = { system: "System", user: "User", assistant: "Assistant", tool: "Tool result" };
+const ROLES: Record<string, string> = { system: "System", user: "User", assistant: "Assistant", tool: "Tool" };
+const CLAMP = 14; // lines of a message shown before "Show all"
 
 /** JSON text is shown indented, anything else as it is. */
 function pretty(text: string): string {
@@ -38,73 +39,106 @@ function pretty(text: string): string {
   }
 }
 
-function Message({ message }: { message: ChatMessage }) {
-  return (
-    <div>
-      <h4>
-        {ROLES[message.role] ?? humanize(message.role)}
-        {message.tool_call_id && <span className="mono"> {message.tool_call_id}</span>}
-      </h4>
-      {message.content ? <pre>{message.role === "tool" ? pretty(message.content) : message.content}</pre> : null}
-      {(message.tool_calls ?? []).map((c) => (
-        <pre key={c.id}>{`${c.function.name} ${pretty(c.function.arguments)}`}</pre>
-      ))}
-    </div>
-  );
-}
-
-function GenerationInput({ gen }: { gen: Gen }) {
-  const [full, setFull] = useState(false);
-  const shown = full ? gen.context : gen.delta;
+/** Long text shows its first lines, with a button for the rest. */
+function Clamped({ text }: { text: string }) {
+  const [all, setAll] = useState(false);
+  const lines = text.split("\n");
+  const cut = !all && lines.length > CLAMP + 2;
   return (
     <>
-      <p className="note-line">
-        {full ? `All ${plural(shown.length, "message")} sent so far` : `${plural(shown.length, "new message")}`}
-        {gen.n > 1 && (
-          <>
-            {" · "}
-            <button type="button" className="link-btn" aria-pressed={full} onClick={() => setFull((f) => !f)}>
-              {full ? "Show only new messages" : "Show full context"}
-            </button>
-          </>
-        )}
-      </p>
-      <div className="json">
-        {shown.map((m, i) => (
-          <Message key={i} message={m} />
-        ))}
-      </div>
+      <pre>{cut ? lines.slice(0, CLAMP).join("\n") : text}</pre>
+      {lines.length > CLAMP + 2 && (
+        <button type="button" className="link-btn msg-more" onClick={() => setAll((a) => !a)}>
+          {all ? "Show less" : `Show all ${count(lines.length)} lines`}
+        </button>
+      )}
     </>
   );
 }
 
-function GenerationTools({ gen, use }: { gen: Gen; use: ToolUse }) {
+/** The tool each tool_call_id belongs to, from the assistant messages that asked for them. */
+function toolNames(messages: ChatMessage[]): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const m of messages) for (const c of m.tool_calls ?? []) names.set(c.id, c.function.name);
+  return names;
+}
+
+function MessageBlock({ message, isNew, name, open }: { message: ChatMessage; isNew: boolean; name?: string; open: boolean }) {
+  const calls = message.tool_calls ?? [];
   return (
-    <div className="tool-list">
-      {(["Read", "Calculate", "Write", "Finish"] as const).map((group) => {
-        const tools = gen.tools.filter((t) => toolGroup(t.function.name) === group);
-        if (tools.length === 0) return null;
-        return (
-          <div key={group}>
-            <h4>{group}</h4>
-            {tools.map((t) => {
-              const n = use.calls[t.function.name] ?? 0;
-              return (
-                <details key={t.function.name} className={`tool ${n === 0 ? "unused" : ""}`}>
+    <details className={`msg ${message.role}`} open={open}>
+      <summary>
+        <span className="msg-role">{ROLES[message.role] ?? humanize(message.role)}</span>
+        {name && <span className="call-name">{name}</span>}
+        {message.tool_call_id && <span className="mono muted">{message.tool_call_id}</span>}
+        {calls.length > 0 && <span className="msg-calls">{calls.map((c) => c.function.name).join(", ")}</span>}
+        {isNew && <span className="node-chip">new</span>}
+      </summary>
+      <div className="msg-body">
+        {message.content ? <Clamped text={message.role === "tool" ? pretty(message.content) : message.content} /> : null}
+        {calls.map((c) => (
+          <div key={c.id} className="msg-call">
+            <span className="call-name">{c.function.name}</span> <span className="mono muted">{c.id}</span>
+            <pre>{pretty(c.function.arguments)}</pre>
+          </div>
+        ))}
+        {!message.content && calls.length === 0 && <p className="muted">Empty.</p>}
+      </div>
+    </details>
+  );
+}
+
+/** The tool list sent with this call, as the model saw it. */
+function ToolsBlock({ gen }: { gen: Gen }) {
+  const called = new Set(gen.toolCalls.map((c) => c.name));
+  return (
+    <details className="msg tools">
+      <summary>
+        <span className="msg-role">Tools</span>
+        <span className="muted">{plural(gen.tools.length, "tool")} offered</span>
+      </summary>
+      <div className="msg-body tool-list">
+        {gen.tools.length === 0 && <p className="muted">No tool list was recorded for this call.</p>}
+        {(["Read", "Calculate", "Write", "Finish"] as const).map((group) => {
+          const tools = gen.tools.filter((t) => toolGroup(t.function.name) === group);
+          if (tools.length === 0) return null;
+          return (
+            <div key={group}>
+              <h4>{group}</h4>
+              {tools.map((t) => (
+                <details key={t.function.name} className="tool">
                   <summary>
                     <span className="call-name">{t.function.name}</span>
-                    <span className="call-result">
-                      {n > 0 ? plural(n, "call") : use.preloaded.has(t.function.name) ? "preloaded by the harness" : "unused"}
-                    </span>
+                    {called.has(t.function.name) && <span className="node-chip">called in this response</span>}
                   </summary>
                   <p className="muted">{t.function.description}</p>
                   <pre>{JSON.stringify(t.function.parameters, null, 2)}</pre>
                 </details>
-              );
-            })}
-          </div>
-        );
-      })}
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </details>
+  );
+}
+
+/** Everything this call sent: the tools, then every message so far. Messages added since the previous call are marked. */
+function GenerationInput({ gen }: { gen: Gen }) {
+  const names = toolNames(gen.context);
+  const firstNew = gen.n > 1 ? gen.context.length - gen.delta.length : gen.context.length;
+  return (
+    <div className="msgs">
+      <ToolsBlock gen={gen} />
+      {gen.context.map((m, i) => (
+        <MessageBlock
+          key={i}
+          message={m}
+          isNew={i >= firstNew}
+          name={m.tool_call_id ? names.get(m.tool_call_id) : undefined}
+          open={!(m.role === "system" && gen.n > 1)}
+        />
+      ))}
     </div>
   );
 }
@@ -112,25 +146,32 @@ function GenerationTools({ gen, use }: { gen: Gen; use: ToolUse }) {
 function GenerationOutput({ gen }: { gen: Gen }) {
   if (!gen.responded) return <p className="note-line">No response was recorded.</p>;
   return (
-    <div className="json">
-      <div>
-        <h4>Text</h4>
-        {gen.text ? <p className="trace-text">{gen.text}</p> : <p className="muted">No text, only tool calls.</p>}
-      </div>
-      {gen.toolCalls.length > 0 && (
-        <div>
-          <h4>Tool calls</h4>
+    <div className="msgs">
+      <details className="msg assistant" open>
+        <summary>
+          <span className="msg-role">Assistant</span>
+          {gen.toolCalls.length > 0 && <span className="msg-calls">{gen.toolCalls.map((c) => c.name).join(", ")}</span>}
+        </summary>
+        <div className="msg-body">
+          {gen.text ? <Clamped text={gen.text} /> : <p className="muted">No text, only tool calls.</p>}
           {gen.toolCalls.map((c) => (
-            <div key={c.id} className="py-1">
-              <span className="call-name">{c.name}</span>
+            <div key={c.id} className="msg-call">
+              <span className="call-name">{c.name}</span> <span className="mono muted">{c.id}</span>
               <div className="call-args" style={{ marginLeft: 0 }}><Args args={c.arguments} /></div>
             </div>
           ))}
         </div>
-      )}
+      </details>
     </div>
   );
 }
+
+/** Exactly what was sent and received, for copying. */
+const rawInput = (gen: Gen) => ({ model: gen.model, messages: gen.context, tools: gen.tools });
+const rawOutput = (gen: Gen) => ({
+  text: gen.text || null, tool_calls: gen.toolCalls, finish_reason: gen.finishReason,
+  usage: { input_tokens: gen.tokensIn, output_tokens: gen.tokensOut }, latency_s: gen.latency,
+});
 
 /* ---------- the tree ---------- */
 
@@ -228,6 +269,7 @@ function Facts({ node }: { node: TraceNode }) {
   if (model) facts.push(["Model", model]);
   if (timed(node)) facts.push(["Duration", duration(node.end - node.start)]);
   if (node.tokens) facts.push(["Tokens", `${count(node.tokens.in)} in, ${count(node.tokens.out)} out`]);
+  if (node.gen?.finishReason) facts.push(["Finish reason", node.gen.finishReason]);
   if (facts.length === 0) return null;
   return (
     <dl className="facts">
@@ -270,14 +312,23 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function Detail({ node }: { node: TraceNode }) {
+function ViewToggle({ raw, onChange }: { raw: boolean; onChange: (raw: boolean) => void }) {
+  return (
+    <div className="seg" role="group" aria-label="View">
+      <button type="button" aria-pressed={!raw} onClick={() => onChange(false)}>Formatted</button>
+      <button type="button" aria-pressed={raw} onClick={() => onChange(true)}>JSON</button>
+    </div>
+  );
+}
+
+function Detail({ node, raw, onRaw }: { node: TraceNode; raw: boolean; onRaw: (raw: boolean) => void }) {
   const gen = node.gen;
   let input: ReactNode = null;
-  if (gen) input = <GenerationInput key={node.id} gen={gen} />;
+  if (gen) input = raw ? <Json value={rawInput(gen)} empty="" /> : <GenerationInput key={node.id} gen={gen} />;
   else if (node.type === "agent" || node.type === "tool") input = <Json value={node.input} empty="No input." />;
 
   let output: ReactNode;
-  if (gen) output = gen.responded ? <GenerationOutput gen={gen} /> : <p className="note-line">{node.summary?.text}.</p>;
+  if (gen) output = !gen.responded ? <p className="note-line">{node.summary?.text}.</p> : raw ? <Json value={rawOutput(gen)} empty="" /> : <GenerationOutput key={node.id} gen={gen} />;
   else if (node.type === "agent" || node.type === "tool") output = <Json value={node.output} empty={node.type === "agent" ? "The run has not finished yet." : "Waiting for the result."} />;
   else if (node.type === "span")
     output = (
@@ -299,16 +350,11 @@ function Detail({ node }: { node: TraceNode }) {
         <h3 className={node.type === "tool" ? "call-name" : undefined}>{node.name}</h3>
         {node.summary && <span className={`pill ${toneClass(node.summary.tone)}`}>{node.summary.text}</span>}
         {node.recovered && <span className="pill warn">Recovered from text</span>}
+        {gen && <ViewToggle raw={raw} onChange={onRaw} />}
       </header>
       <Facts node={node} />
       {input && <Section title="Input">{input}</Section>}
       <Section title="Output">{output}</Section>
-      {gen && gen.n === 1 && node.use && (
-        <details className="disclosure">
-          <summary>Tools offered</summary>
-          <GenerationTools gen={gen} use={node.use} />
-        </details>
-      )}
       <details className="disclosure">
         <summary>Metadata</summary>
         <Json value={node.metadata} empty="No metadata." />
@@ -323,6 +369,7 @@ function TraceView({ events, live }: { events: TraceEvent[]; live: boolean }) {
   const root = useMemo(() => buildTree(events, !live), [events, live]);
   const index = useMemo(() => everyNode(root), [root]);
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [raw, setRaw] = useState(false); // Formatted or JSON, kept while moving between model calls
   const [pick, setPick] = useState<string | null>(null); // the user's choice; until then a live run follows its newest node
   const pane = useRef<HTMLDivElement>(null);
   const refocus = useRef<string | null>(null);
@@ -403,7 +450,7 @@ function TraceView({ events, live }: { events: TraceEvent[]; live: boolean }) {
         )}
       </div>
       <section className="trace-detail" aria-label="Details of the selected step">
-        <Detail node={selected} />
+        <Detail node={selected} raw={raw} onRaw={setRaw} />
       </section>
     </div>
   );
