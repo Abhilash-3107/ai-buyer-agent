@@ -130,7 +130,7 @@ A scenario passes only when every repeat passes.
 
 | Name | Kind | Runs | Scenarios passed | Runs passed | decision | information | constraints | action | validation | recovery |
 |---|---|---|---|---|---|---|---|---|---|---|
-| [gpt-6-luna](eval/gpt-6-luna.md) | model | 33 (11 x 3) | 9/11 | 27/33 | 30/33 | 33/33 | 33/33 | 28/33 | 30/33 | 7/7 |
+| [gpt-6-luna](eval/gpt-6-luna.md) | model | 33 (11 x 3) | 9/11 | 29/33 | 30/33 | 33/33 | 33/33 | 31/33 | 32/33 | 6/6 |
 | [rubber_stamp](eval/rubber_stamp.md) | baseline | 11 | 0/11 | 0/11 | 3/11 | 0/11 | 11/11 | 3/11 | 5/11 | 0/4 |
 | [do_nothing](eval/do_nothing.md) | baseline | 11 | 0/11 | 0/11 | 1/11 | 0/11 | 11/11 | 3/11 | 4/11 | n/a |
 
@@ -147,7 +147,7 @@ Runs passed per scenario:
 | S2-ALT-ALSO-SHORT | 3/3 | 0/1 | 0/1 |
 | S3-SUSTAINED-SPIKE | 3/3 | 0/1 | 0/1 |
 | S3-PROMO-ENDING | 0/3 | 0/1 | 0/1 |
-| S4-BUDGET | 0/3 | 0/1 | 0/1 |
+| S4-BUDGET | 2/3 | 0/1 | 0/1 |
 | S4-MOQ-VS-SHELF-LIFE | 3/3 | 0/1 | 0/1 |
 <!-- RESULTS:END -->
 
@@ -212,19 +212,20 @@ The judgement was weak, and that is what the evaluation measures.
 ### 3. A strong model names the promotion, then plans as if it lasts (S3-PROMO-ENDING)
 
 gpt-6-luna failed S3-PROMO-ENDING in all three repeats, and its own key factors show why.
-In every run it wrote that all seven elevated sales days overlap PROMO-77, which ends the next day.
-In two runs it then called `plan_order` at 73 units a day, the promotional rate, and raised PO-3003 from 200 to 480 and to 672 units (runs `20261114T123054-b0711b` and `20261114T123104-7ada82`).
-The second run's summary even says demand "may normalize after it ends".
+In every run it wrote that the elevated sales days overlap PROMO-77, which ends the next day.
+In every run it called `plan_order` at both 25 units a day (the normal rate) and 73 (the promotional rate).
+In two runs it then placed a new 480-unit PO planned at 73 a day (runs `20261114T130953-8c8f5f` and `20261114T131005-dfcd19`), while its summary said the spike "coincides with a promotion ending Nov 12, so demand may normalize".
 After the two remaining promotion days (about 146 units), the 420 on hand plus the 200 inbound still leave about 474 units, above the 375-unit target at the normal 25 a day, so nothing needed to change.
-The third run planned at 25, 73 and the 28-day mean of 37, could not choose, and escalated an `INVESTIGATION` without buying (run `20261114T123114-174b89`).
+The third run escalated an `INVESTIGATION` without buying (run `20261114T131016-3fd690`).
 That is a safe answer but the wrong label: the data was consistent, so there was nothing to investigate.
+An earlier evaluation of the same model showed the same pattern (it raised the open PO to 480 and 672 units).
 
-All three orders were legal, so `constraints` and `validation` passed, and only `decision` and `action` caught them.
+All the orders were legal, so `constraints` and `validation` passed, and only `decision` and `action` caught them.
 This is the case the "legal is not the same as right" check exists for: the rules cannot tell a promotional rate from a sustained one, and the model's choice of daily demand is the judgement being measured.
 
-### 4. Escalating instead of buying what the budget allows (S4-BUDGET)
+### 4. A verifier escape hatch, found by the model (S4-BUDGET)
 
-gpt-6-luna failed S4-BUDGET in all three repeats in the same way.
+In the first full evaluation gpt-6-luna failed S4-BUDGET in all three repeats in the same way.
 It read everything, planned at the right 60 units a day, and saw that `plan_order` capped the order at 396 units by budget, against a net need of 570.
 It raised a correct `BUDGET_INCREASE` escalation with the numbers, and then bought nothing.
 Its summary gives the reason: the largest affordable order "would not cover planned net need".
@@ -234,8 +235,21 @@ The 7-day lead time means an order placed today arrives on the day stock runs ou
 396 units on top of the 450 on hand cover about 14 of the 17 days the plan targets, so the gap is the safety stock, not the stock itself.
 And the 396-unit PO ($2,376) is above the $2,000 approval limit, so a person would have seen it next to the budget request anyway: buying it now risks no unauthorised spend.
 
-The verifier refused both of its labels, `INVESTIGATE` (no investigation was raised) and `MODIFY` (no PO changed), and the run was flagged for a human.
-The scorer marks the run wrong on `action` (0 units, expected 120 to 396).
+The traces also exposed a gap in the verifier.
+Any escalation, of any kind, switched off the `STOCKOUT_UNRESOLVED` check.
+In a later run the model relabelled its no-buy decision to `REJECT` and passed verification, although stock runs out the day an order placed now would arrive.
+The scorer still failed the run, but the agent never got the feedback that might have made it buy.
+
+What changed: a `BUDGET_INCREASE` now explains a projected stockout only when the remaining budget cannot pay for a minimum order from any approved supplier.
+`INVESTIGATION`, `SUPPLIER_ISSUE` and `OTHER` still excuse it, because those are problems buying cannot fix now.
+The finding names the unspent budget, so the agent learns why its answer was refused.
+
+The evaluation was re-run in full after the change (the results above).
+S4-BUDGET now passes in 2 of 3 runs.
+Those two bought the full 396 before submitting and never needed the new finding, so part of the improvement is run-to-run variation, not the fix.
+The third run is the one that exercised it: it escalated and bought nothing, the new finding refused the submission, and the agent then bought, which the old verifier never made it do.
+But it bought only 120 units, the minimum order the finding named, and was refused again for the $1,680 still unspent (run `20261114T131029-23f0ad`).
+Naming the smallest order anchored the model on it; a finding that states only the unspent budget, and leaves the quantity to `plan_order`, is the obvious next change.
 
 ## Run the same evaluation on a model
 

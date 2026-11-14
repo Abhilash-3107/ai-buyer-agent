@@ -1,0 +1,2178 @@
+{
+  "name": "gpt-6-luna",
+  "kind": "model",
+  "repeats": 3,
+  "temperature": 0.0,
+  "agent_version": {
+    "git": "b0fe06c",
+    "prompt_sha": "2cf70775b782"
+  },
+  "cards": [
+    {
+      "scenario_id": "S1-MODIFY",
+      "run_id": "20261114T130548-7162ef",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "192 units, expected 168-240"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 192,
+      "turns": 4,
+      "tool_calls": 12,
+      "blocked_writes": 0,
+      "tokens_in": 15347,
+      "tokens_out": 504,
+      "latency_s": 9.474,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-MODIFY",
+      "run_id": "20261114T130557-1b58f2",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "192 units, expected 168-240"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 192,
+      "turns": 4,
+      "tool_calls": 12,
+      "blocked_writes": 0,
+      "tokens_in": 15351,
+      "tokens_out": 510,
+      "latency_s": 8.333,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-MODIFY",
+      "run_id": "20261114T130606-44a40d",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "192 units, expected 168-240"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 192,
+      "turns": 4,
+      "tool_calls": 12,
+      "blocked_writes": 0,
+      "tokens_in": 15341,
+      "tokens_out": 488,
+      "latency_s": 8.067,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-ACCEPT",
+      "run_id": "20261114T130614-360400",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided ACCEPT, expected ACCEPT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "480 units, expected 456-504"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 480,
+      "turns": 4,
+      "tool_calls": 12,
+      "blocked_writes": 0,
+      "tokens_in": 15163,
+      "tokens_out": 486,
+      "latency_s": 8.109,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-ACCEPT",
+      "run_id": "20261114T130622-4574ec",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided ACCEPT, expected ACCEPT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "480 units, expected 456-504"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 480,
+      "turns": 4,
+      "tool_calls": 12,
+      "blocked_writes": 0,
+      "tokens_in": 15166,
+      "tokens_out": 507,
+      "latency_s": 8.694,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-ACCEPT",
+      "run_id": "20261114T130631-a50201",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided ACCEPT, expected ACCEPT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "480 units, expected 456-504"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 480,
+      "turns": 4,
+      "tool_calls": 12,
+      "blocked_writes": 0,
+      "tokens_in": 15164,
+      "tokens_out": 489,
+      "latency_s": 7.64,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-REJECT",
+      "run_id": "20261114T130638-869e17",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided REJECT, expected REJECT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 3 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "0 units, expected 0"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "REJECT",
+      "new_buy_units": 0,
+      "turns": 3,
+      "tool_calls": 11,
+      "blocked_writes": 0,
+      "tokens_in": 10774,
+      "tokens_out": 385,
+      "latency_s": 6.577,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-REJECT",
+      "run_id": "20261114T130645-98ebd1",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided REJECT, expected REJECT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 3 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "0 units, expected 0"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "REJECT",
+      "new_buy_units": 0,
+      "turns": 3,
+      "tool_calls": 12,
+      "blocked_writes": 0,
+      "tokens_in": 10830,
+      "tokens_out": 404,
+      "latency_s": 6.997,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-REJECT",
+      "run_id": "20261114T130652-ced196",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided REJECT, expected REJECT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 3 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "0 units, expected 0"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "REJECT",
+      "new_buy_units": 0,
+      "turns": 3,
+      "tool_calls": 11,
+      "blocked_writes": 0,
+      "tokens_in": 10774,
+      "tokens_out": 384,
+      "latency_s": 5.531,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-INVESTIGATE",
+      "run_id": "20261114T130658-721fd5",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided INVESTIGATE, expected INVESTIGATE"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 3 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "0 units, expected 0; INVESTIGATION escalation raised"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "INVESTIGATE",
+      "new_buy_units": 0,
+      "turns": 4,
+      "tool_calls": 12,
+      "blocked_writes": 0,
+      "tokens_in": 15293,
+      "tokens_out": 538,
+      "latency_s": 8.735,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-INVESTIGATE",
+      "run_id": "20261114T130706-41d4de",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided INVESTIGATE, expected INVESTIGATE"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 3 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "0 units, expected 0; INVESTIGATION escalation raised"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "INVESTIGATE",
+      "new_buy_units": 0,
+      "turns": 4,
+      "tool_calls": 12,
+      "blocked_writes": 0,
+      "tokens_in": 15286,
+      "tokens_out": 513,
+      "latency_s": 7.921,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S1-INVESTIGATE",
+      "run_id": "20261114T130714-1ae718",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided INVESTIGATE, expected INVESTIGATE"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 3 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "0 units, expected 0; INVESTIGATION escalation raised"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "INVESTIGATE",
+      "new_buy_units": 0,
+      "turns": 4,
+      "tool_calls": 12,
+      "blocked_writes": 0,
+      "tokens_in": 15267,
+      "tokens_out": 510,
+      "latency_s": 7.979,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S2-SOURCE-ELSEWHERE",
+      "run_id": "20261114T130722-6b6ad9",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "90 units, expected 90-220"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 90,
+      "turns": 5,
+      "tool_calls": 13,
+      "blocked_writes": 0,
+      "tokens_in": 21612,
+      "tokens_out": 575,
+      "latency_s": 10.777,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S2-SOURCE-ELSEWHERE",
+      "run_id": "20261114T130733-0b6665",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "90 units, expected 90-220"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 90,
+      "turns": 5,
+      "tool_calls": 13,
+      "blocked_writes": 0,
+      "tokens_in": 21642,
+      "tokens_out": 626,
+      "latency_s": 10.424,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S2-SOURCE-ELSEWHERE",
+      "run_id": "20261114T130743-11de1f",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "90 units, expected 90-220"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 90,
+      "turns": 5,
+      "tool_calls": 14,
+      "blocked_writes": 0,
+      "tokens_in": 22047,
+      "tokens_out": 663,
+      "latency_s": 10.626,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S2-ACCEPT-SHORT",
+      "run_id": "20261114T130754-913add",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided ACCEPT, expected ACCEPT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 4 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "0 units, expected 0"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 0,
+      "turns": 4,
+      "tool_calls": 12,
+      "blocked_writes": 0,
+      "tokens_in": 16454,
+      "tokens_out": 476,
+      "latency_s": 9.669,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S2-ACCEPT-SHORT",
+      "run_id": "20261114T130804-5e287b",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided ACCEPT, expected ACCEPT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 4 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "0 units, expected 0"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 0,
+      "turns": 4,
+      "tool_calls": 12,
+      "blocked_writes": 0,
+      "tokens_in": 16472,
+      "tokens_out": 507,
+      "latency_s": 9.34,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S2-ACCEPT-SHORT",
+      "run_id": "20261114T130813-0fcf2d",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided ACCEPT, expected ACCEPT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 4 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "0 units, expected 0"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "ACCEPT",
+      "new_buy_units": 0,
+      "turns": 4,
+      "tool_calls": 12,
+      "blocked_writes": 0,
+      "tokens_in": 16490,
+      "tokens_out": 531,
+      "latency_s": 8.322,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S2-ALT-ALSO-SHORT",
+      "run_id": "20261114T130821-1f42a1",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "130 units, expected 90-220"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 1 failed writes were followed by a successful write or an escalation, or the agent rightly gave up and the action check passed"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 130,
+      "turns": 9,
+      "tool_calls": 19,
+      "blocked_writes": 0,
+      "tokens_in": 45797,
+      "tokens_out": 1082,
+      "latency_s": 17.782,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 1
+    },
+    {
+      "scenario_id": "S2-ALT-ALSO-SHORT",
+      "run_id": "20261114T130839-ccf034",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "130 units, expected 90-220"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 2 failed writes were followed by a successful write or an escalation, or the agent rightly gave up and the action check passed"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 130,
+      "turns": 10,
+      "tool_calls": 18,
+      "blocked_writes": 0,
+      "tokens_in": 50256,
+      "tokens_out": 941,
+      "latency_s": 19.274,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S2-ALT-ALSO-SHORT",
+      "run_id": "20261114T130858-dd7b59",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "130 units, expected 90-220"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 2 failed writes were followed by a successful write or an escalation, or the agent rightly gave up and the action check passed"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 130,
+      "turns": 10,
+      "tool_calls": 21,
+      "blocked_writes": 0,
+      "tokens_in": 51703,
+      "tokens_out": 1014,
+      "latency_s": 19.446,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 1
+    },
+    {
+      "scenario_id": "S3-SUSTAINED-SPIKE",
+      "run_id": "20261114T130918-471108",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "192 units, expected 180-650"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 192,
+      "turns": 6,
+      "tool_calls": 14,
+      "blocked_writes": 0,
+      "tokens_in": 24198,
+      "tokens_out": 576,
+      "latency_s": 11.983,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 1
+    },
+    {
+      "scenario_id": "S3-SUSTAINED-SPIKE",
+      "run_id": "20261114T130930-3cfba6",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "192 units, expected 180-650"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 192,
+      "turns": 6,
+      "tool_calls": 14,
+      "blocked_writes": 0,
+      "tokens_in": 24210,
+      "tokens_out": 575,
+      "latency_s": 11.317,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 1
+    },
+    {
+      "scenario_id": "S3-SUSTAINED-SPIKE",
+      "run_id": "20261114T130941-515b65",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 6 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "192 units, expected 180-650"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 192,
+      "turns": 6,
+      "tool_calls": 14,
+      "blocked_writes": 0,
+      "tokens_in": 24193,
+      "tokens_out": 580,
+      "latency_s": 11.605,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 1
+    },
+    {
+      "scenario_id": "S3-PROMO-ENDING",
+      "run_id": "20261114T130953-8c8f5f",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": false,
+          "reason": "decided MODIFY, expected ACCEPT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 5 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": false,
+          "reason": "480 units, expected 0"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 480,
+      "turns": 7,
+      "tool_calls": 15,
+      "blocked_writes": 0,
+      "tokens_in": 30298,
+      "tokens_out": 577,
+      "latency_s": 12.613,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 1
+    },
+    {
+      "scenario_id": "S3-PROMO-ENDING",
+      "run_id": "20261114T131005-dfcd19",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": false,
+          "reason": "decided MODIFY, expected ACCEPT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 5 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": false,
+          "reason": "480 units, expected 0"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 480,
+      "turns": 6,
+      "tool_calls": 14,
+      "blocked_writes": 0,
+      "tokens_in": 25174,
+      "tokens_out": 621,
+      "latency_s": 10.722,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S3-PROMO-ENDING",
+      "run_id": "20261114T131016-3fd690",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": false,
+          "reason": "decided INVESTIGATE, expected ACCEPT"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 5 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "0 units, expected 0"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "INVESTIGATE",
+      "new_buy_units": 0,
+      "turns": 7,
+      "tool_calls": 15,
+      "blocked_writes": 0,
+      "tokens_in": 30068,
+      "tokens_out": 692,
+      "latency_s": 12.521,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "supplier_events",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S4-BUDGET",
+      "run_id": "20261114T131029-23f0ad",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 5 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "120 units, expected 120-396; BUDGET_INCREASE escalation raised"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": false,
+          "reason": "verifier findings: STOCKOUT_UNRESOLVED"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": false,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 120,
+      "turns": 7,
+      "tool_calls": 14,
+      "blocked_writes": 0,
+      "tokens_in": 30141,
+      "tokens_out": 820,
+      "latency_s": 15.519,
+      "verifier_findings": [
+        "STOCKOUT_UNRESOLVED: At 60 units/day the stock runs out on day 9, before the next review (day 14). A BUDGET_INCREASE escalation is open, but it does not explain the gap while $1,680.00 of the budget is still unspent: enough for a minimum order of 120 units from SUP-METRO."
+      ],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S4-BUDGET",
+      "run_id": "20261114T131044-4ee845",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 5 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "396 units, expected 120-396; BUDGET_INCREASE escalation raised"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 396,
+      "turns": 6,
+      "tool_calls": 13,
+      "blocked_writes": 0,
+      "tokens_in": 24757,
+      "tokens_out": 883,
+      "latency_s": 13.602,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S4-BUDGET",
+      "run_id": "20261114T131058-0b383a",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 5 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "396 units, expected 120-396; BUDGET_INCREASE escalation raised"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": false,
+          "passed": true,
+          "reason": "no write failed, nothing to recover from"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 396,
+      "turns": 6,
+      "tool_calls": 13,
+      "blocked_writes": 0,
+      "tokens_in": 24858,
+      "tokens_out": 936,
+      "latency_s": 13.423,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S4-MOQ-VS-SHELF-LIFE",
+      "run_id": "20261114T131111-03a4c0",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 3 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "42 units, expected 36-72"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 1 failed writes were followed by a successful write or an escalation, or the agent rightly gave up and the action check passed"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 42,
+      "turns": 6,
+      "tool_calls": 14,
+      "blocked_writes": 1,
+      "tokens_in": 25556,
+      "tokens_out": 659,
+      "latency_s": 12.444,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S4-MOQ-VS-SHELF-LIFE",
+      "run_id": "20261114T131124-f6fcef",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 3 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "42 units, expected 36-72"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 1 failed writes were followed by a successful write or an escalation, or the agent rightly gave up and the action check passed"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 42,
+      "turns": 6,
+      "tool_calls": 14,
+      "blocked_writes": 1,
+      "tokens_in": 25128,
+      "tokens_out": 607,
+      "latency_s": 11.597,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    },
+    {
+      "scenario_id": "S4-MOQ-VS-SHELF-LIFE",
+      "run_id": "20261114T131135-47e8e6",
+      "model": "gpt-6-luna",
+      "checks": [
+        {
+          "name": "decision",
+          "applicable": true,
+          "passed": true,
+          "reason": "decided MODIFY, expected MODIFY"
+        },
+        {
+          "name": "information",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 3 required categories read"
+        },
+        {
+          "name": "constraints",
+          "applicable": true,
+          "passed": true,
+          "reason": "every PO the agent created or changed passes validation at its recorded demand"
+        },
+        {
+          "name": "action",
+          "applicable": true,
+          "passed": true,
+          "reason": "42 units, expected 36-72"
+        },
+        {
+          "name": "validation",
+          "applicable": true,
+          "passed": true,
+          "reason": "submit_decision was verified against the database with no findings"
+        },
+        {
+          "name": "recovery",
+          "applicable": true,
+          "passed": true,
+          "reason": "all 1 failed writes were followed by a successful write or an escalation, or the agent rightly gave up and the action check passed"
+        }
+      ],
+      "passed": true,
+      "outcome": "DECIDED",
+      "decision": "MODIFY",
+      "new_buy_units": 42,
+      "turns": 6,
+      "tool_calls": 14,
+      "blocked_writes": 1,
+      "tokens_in": 25090,
+      "tokens_out": 592,
+      "latency_s": 10.9,
+      "verifier_findings": [],
+      "info_read": [
+        "budget",
+        "forecast",
+        "inventory",
+        "open_pos",
+        "promotions",
+        "sales_history",
+        "storage",
+        "suppliers"
+      ],
+      "repeat_reads": 0
+    }
+  ]
+}

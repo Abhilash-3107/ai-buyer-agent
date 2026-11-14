@@ -304,12 +304,13 @@ A scenario passes only when every repeat passes.
 
 | Name | Kind | Runs | Scenarios passed | Runs passed | decision | information | constraints | action | validation | recovery |
 |---|---|---|---|---|---|---|---|---|---|---|
-| [gpt-6-luna](docs/eval/gpt-6-luna.md) | model | 33 (11 x 3) | 9/11 | 27/33 | 30/33 | 33/33 | 33/33 | 28/33 | 30/33 | 7/7 |
+| [gpt-6-luna](docs/eval/gpt-6-luna.md) | model | 33 (11 x 3) | 9/11 | 29/33 | 30/33 | 33/33 | 33/33 | 31/33 | 32/33 | 6/6 |
 | [rubber_stamp](docs/eval/rubber_stamp.md) | baseline | 11 | 0/11 | 0/11 | 3/11 | 0/11 | 11/11 | 3/11 | 5/11 | 0/4 |
 | [do_nothing](docs/eval/do_nothing.md) | baseline | 11 | 0/11 | 0/11 | 1/11 | 0/11 | 11/11 | 3/11 | 4/11 | n/a |
 
 The hosted model passes 9 of 11 scenarios on every repeat, and both baselines pass none.
-It fails S3-PROMO-ENDING (it buys into a promotion that ends tomorrow in 2 of 3 runs) and S4-BUDGET (it escalates the budget shortfall but buys nothing, although stock runs out the day a new order would arrive).
+It fails S3-PROMO-ENDING in every repeat: it names the promotion that ends tomorrow, then orders at the promotional rate.
+S4-BUDGET passes in 2 of 3 runs; the third escalated the budget shortfall, bought only after the verifier pushed back, and bought too little.
 Both are judgement failures, not rule breaks: `constraints` is 33 of 33.
 [docs/evaluation.md](docs/evaluation.md#what-the-real-runs-taught-us) walks through both.
 <!-- RESULTS:END -->
