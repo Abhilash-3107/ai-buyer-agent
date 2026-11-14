@@ -40,6 +40,11 @@ def _modified(conn: sqlite3.Connection, run: Run) -> dict[str, int]:
     return first
 
 
+def _cancelled(conn: sqlite3.Connection, run: Run) -> bool:
+    return conn.execute("SELECT 1 FROM audit_log WHERE run_id = ? AND action = 'PO_CANCELLED'",
+                        (run.run_id,)).fetchone() is not None
+
+
 def recorded_demand(conn: sqlite3.Connection, run: Run, po_id: str) -> float | None:
     """The daily demand the agent validated the PO with: its latest create or modify audit row."""
     row = conn.execute("SELECT details_json FROM audit_log WHERE run_id = ? AND entity_id = ? "
@@ -98,13 +103,18 @@ def verify(conn: sqlite3.Connection, run: Run, decision: SubmitDecisionArgs | No
         if po["status"] != PoStatus.PARTIALLY_CONFIRMED:
             continue
         gap = po["qty_ordered"] - po["qty_confirmed"]
-        topped_up = conn.execute(f"SELECT 1 FROM purchase_orders WHERE parent_po_id = ? AND created_by = 'agent' "
-                                 f"AND status IN ({OPEN})", (po["po_id"],)).fetchone()
+        # A top-up is any open agent PO for the same SKU linked to this one or placed after it: the agent
+        # reacted to the short answer. Whether the top-ups were big enough is left to STOCKOUT_UNRESOLVED,
+        # so a top-up linked to a different parent does not push the agent into buying the gap twice.
+        topped_up = conn.execute(
+            f"SELECT 1 FROM purchase_orders WHERE created_by = 'agent' AND status IN ({OPEN}) AND sku = ? "
+            "AND node_id = ? AND (parent_po_id = ? OR rowid > (SELECT rowid FROM purchase_orders WHERE po_id = ?))",
+            (po["sku"], run.node_id, po["po_id"], po["po_id"])).fetchone()
         if not topped_up and not escalated(conn, run, po_id=po["po_id"]):
             findings.append(Finding(
                 "UNRESOLVED_SHORTFALL",
                 f"{po['po_id']} was confirmed at {po['qty_confirmed']} of {po['qty_ordered']} units and the gap of "
-                f"{gap} is neither covered by a top-up PO (parent_po_id={po['po_id']}) nor escalated.",
+                f"{gap} is neither covered by a later top-up PO nor escalated.",
                 {"po_id": po["po_id"], "gap": gap}))
 
     if decision is None:
@@ -131,6 +141,11 @@ def verify(conn: sqlite3.Connection, run: Run, decision: SubmitDecisionArgs | No
                 f"At {demand:g} units/day the stock runs out on day {stockout}, before the next review "
                 f"(day {horizon}), and no escalation was raised.", {"stockout_day": stockout, "horizon": horizon}))
 
+    if decision.decision == Decision.MODIFY and not touched and not _cancelled(conn, run):
+        findings.append(Finding("DECISION_ACTION_MISMATCH",
+                                "The decision is MODIFY but no PO was created, resized or cancelled. MODIFY means "
+                                "you changed purchasing; if you only escalated, pick the label that matches.",
+                                {"decision": decision.decision}))
     if decision.decision in (Decision.REJECT, Decision.INVESTIGATE) and units > 0:
         findings.append(Finding("DECISION_ACTION_MISMATCH",
                                 f"The decision is {decision.decision} but {units} new units were bought.",

@@ -60,6 +60,30 @@ def test_unresolved_shortfall_until_topped_up_or_escalated():
     assert codes(conn, run, decision("MODIFY", 40)) == []
 
 
+def test_a_later_top_up_linked_to_another_parent_still_resolves_the_shortfall():
+    """Seen live: the agent topped up QuickSupply's gap but linked it to the original PO. Demanding the exact
+    parent link made it buy the gap a second time."""
+    run, conn = new_run("S2-ALT-ALSO-SHORT", in_memory=True)
+    actions.create_po(conn, run, "SKU-2003", Q, 110, 41, "r", parent_po_id="PO-2003")  # 40 of 110 confirmed
+    actions.create_po(conn, run, "SKU-2003", R, 70, 41, "top-up", parent_po_id="PO-2003")
+    assert "UNRESOLVED_SHORTFALL" not in codes(conn, run, decision("MODIFY", 110, demand=41.0))
+
+
+def test_a_po_placed_before_the_short_one_is_not_a_top_up():
+    run, conn = new_run("S2-ALT-ALSO-SHORT", in_memory=True)
+    actions.create_po(conn, run, "SKU-2003", R, 50, 40, "r")
+    actions.create_po(conn, run, "SKU-2003", Q, 90, 40, "r")  # short, and nothing after it
+    assert "UNRESOLVED_SHORTFALL" in codes(conn, run, decision("MODIFY", 90))
+
+
+def test_modify_without_any_po_change_is_a_mismatch():
+    """Seen live: the agent only escalated, then relabelled INVESTIGATE as MODIFY to pass."""
+    run, conn = new_run("S4-BUDGET", in_memory=True)
+    actions.escalate(conn, run, "BUDGET_INCREASE", "need 576, budget fits 396", {})
+    assert codes(conn, run, decision("MODIFY", 0, demand=60.0)) == ["DECISION_ACTION_MISMATCH"]
+    assert verify(conn, run, decision("REJECT", 0, demand=60.0)).passed
+
+
 def test_stockout_unresolved_unless_escalated():
     run, conn = new_run("S2-SOURCE-ELSEWHERE", in_memory=True)  # 430 units at 40/day run out on day 10, review on day 13
     assert codes(conn, run, decision("ACCEPT", 0)) == ["STOCKOUT_UNRESOLVED"]
