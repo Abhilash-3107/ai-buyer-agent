@@ -36,19 +36,59 @@ def test_s1_modify_happy_path():
     assert result.outcome == "DECIDED" and result.verification.passed and result.decision.decision == "MODIFY"
     assert result.steps == 4 and (result.tokens_in, result.tokens_out) == (400, 40)
     # the code preloads the trigger, the core snapshot, suppliers, budget and storage before the first model call
-    system_calls = [e.data["name"] for e in events if e.type == "tool_call" and e.data["by"] == "system"]
+    system_calls = [e.data["name"] for e in events if e.type == "tool_call" and e.data["by"] == "harness"]
     assert system_calls == ["get_recommendation", "get_product", "get_inventory", "get_purchase_orders",
                             "get_forecast", "get_sales_history", "get_suppliers", "get_budget",
                             "get_storage"]
-    assert all(e.turn == 0 for e in events if e.data.get("by") == "system")
+    assert all(e.turn == 0 for e in events if e.data.get("by") == "harness")
     agent_calls = [e.data["name"] for e in events if e.type == "tool_call" and e.data["by"] == "agent"]
     assert agent_calls == ["plan_order", "create_po", "create_po", "submit_decision"]
     assert [r["status"] for r in results(events, "create_po")] == ["BLOCKED", "WRITTEN"]
-    assert [c.by for c in result.tool_calls] == ["system"] * 9 + ["agent"] * 3
+    assert [c.by for c in result.tool_calls] == ["harness"] * 9 + ["agent"] * 3
     types = [e.type for e in events]
     assert types[0] == "run_started" and types[-1] == "run_finished"
     assert types.index("decision") < types.index("verification") < types.index("run_finished")
     assert [e.seq for e in events] == list(range(1, len(events) + 1))
+
+
+def test_trace_records_what_the_model_was_sent_and_which_harness_steps_ran():
+    script = [
+        reply(call("create_po", {**S1, "qty": 800}, "c1")),
+        reply(call("create_po", {**S1, "qty": 192}, "c2")),
+        reply(submit("MODIFY", 192)),
+    ]
+    llm = scripted_llm(script)
+    events = []
+    run_agent("S1-MODIFY", llm, in_memory=True, on_event=events.append)
+
+    requests = [e for e in events if e.type == "llm_request"]
+    assert [e.turn for e in requests] == [1, 2, 3]
+    first, second = requests[0].data, requests[1].data
+    assert [m["role"] for m in first["messages"]] == ["system", "user"] and first["message_count"] == 2
+    assert len(first["tools"]) == 18 and "tools" not in second  # the tool list is recorded once
+    assert [m["role"] for m in second["messages"]] == ["assistant", "tool"] and second["message_count"] == 4
+    assert second["messages"][1] == llm.sent[1][-1]  # exactly what the model received
+    assert all(e.data["model"] == "scripted" for e in events if e.type == "llm_response")
+
+    steps = [(e.data["call_id"], e.data["stage"], e.data["status"]) for e in events if e.type == "harness_step"]
+    assert steps == [("c1", "validator", "BLOCKED"), ("c2", "validator", "PASSED"),
+                     ("c2", "approval", "AUTO_SUBMITTED"), ("c2", "supplier", "CONFIRMED")]
+    supplier = next(e.data for e in events if e.type == "harness_step" and e.data["stage"] == "supplier")
+    assert (supplier["requested"], supplier["confirmed"]) == (192, 192)
+
+
+def test_harness_steps_never_reach_the_model_or_the_traced_result():
+    llm = scripted_llm([reply(call("create_po", {**S1, "qty": 192}, "c1")), reply(submit("MODIFY", 192))])
+    events = []
+    run_agent("S1-MODIFY", llm, in_memory=True, on_event=events.append)
+
+    tool_message = llm.sent[1][-1]
+    assert tool_message["role"] == "tool" and tool_message["tool_call_id"] == "c1"
+    assert "harness_steps" not in json.loads(tool_message["content"])
+    assert any(e.type == "harness_step" for e in events)
+    assert "harness_steps" not in results(events, "create_po")[0]
+    assert [k for k in json.loads(tool_message["content"])] == [
+        "ok", "status", "po_id", "escalation_id", "message", "violations", "shortfall", "supplier"]
 
 
 def test_s2_alt_short_confirmation_is_fixed_after_verifier_feedback():

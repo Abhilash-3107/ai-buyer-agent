@@ -119,9 +119,9 @@ def _preload(session: ToolSession, trace: Trace, scenario_trigger: dict) -> dict
     conn, run = session.conn, session.run
 
     def read(name: str, args: dict) -> dict:
-        trace.emit("tool_call", 0, name=name, args=args, by="system")
-        result = session.call(name, args, by="system")
-        trace.emit("tool_result", 0, name=name, ok=result["ok"], result=result, by="system")
+        trace.emit("tool_call", 0, name=name, args=args, by="harness")
+        result = session.call(name, args, by="harness")
+        trace.emit("tool_result", 0, name=name, ok=result["ok"], result=result, by="harness")
         return result
 
     kind = scenario_trigger["type"]
@@ -155,6 +155,7 @@ def run_agent(scenario_id: str, llm: LLMClient, *, max_turns: int = 30,
 
     outcome, decision, verification = "MAX_STEPS", None, VerificationResult(True, ())
     steps = tokens_in = tokens_out = nudges = findings_sent = 0
+    sent = 0  # messages already recorded in an llm_request event
     previous_input = None  # the last turn's input_tokens: the conversation only grows
     round_turn = 0  # the turn of the last failed verifier round: one per turn
     failures: Counter = Counter()
@@ -169,6 +170,8 @@ def run_agent(scenario_id: str, llm: LLMClient, *, max_turns: int = 30,
         if is_write and locked and call.name != "escalate_to_human":
             return {"ok": False, "error": WRITES_LOCKED}
         result = session.call(call.name, call.arguments)
+        for step in result.pop("harness_steps", ()):  # traced as harness steps; the model sees the result without them
+            trace.emit("harness_step", turn, call_id=call.id, **step)
         key = _failure_key(call.name, result) if is_write else None
         if key:
             failures[key] += 1
@@ -207,6 +210,9 @@ def run_agent(scenario_id: str, llm: LLMClient, *, max_turns: int = 30,
     done = False
     for turn in range(1, max_turns + 1):
         steps = turn
+        trace.emit("llm_request", turn, messages=messages[sent:], message_count=len(messages),
+                   **({"tools": tools} if sent == 0 else {}))  # the tool list never changes, so it is sent once
+        sent = len(messages)
         try:
             resp = llm.chat(messages, tools)
         except Exception as exc:  # noqa: BLE001 - a provider failure must end the run cleanly, not crash the caller
@@ -216,7 +222,7 @@ def run_agent(scenario_id: str, llm: LLMClient, *, max_turns: int = 30,
         tokens_in += resp.usage.get("input_tokens", 0)
         tokens_out += resp.usage.get("output_tokens", 0)
         trace.emit("llm_response", turn, text=resp.text, finish_reason=resp.finish_reason, usage=resp.usage,
-                   latency_s=round(resp.latency_s, 3),
+                   model=resp.model, latency_s=round(resp.latency_s, 3),
                    tool_calls=[{"id": c.id, "name": c.name, "arguments": c.arguments, "parse_error": c.parse_error}
                                for c in resp.tool_calls])
 

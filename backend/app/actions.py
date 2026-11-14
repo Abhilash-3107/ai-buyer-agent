@@ -36,12 +36,14 @@ class ActionResult:
     supplier: SupplierResponse | None  # what the supplier actually confirmed (loop 2)
     message: str
     escalation_id: str | None = None  # set when a human queue entry was opened
+    steps: tuple[dict, ...] = ()  # harness steps that ran: {stage: validator | approval | supplier, status, detail}
 
 
 def _result(status: str, message: str, *, po_id: str | None = None, violations: tuple[Violation, ...] = (),
-            supplier: SupplierResponse | None = None, escalation_id: str | None = None) -> ActionResult:
+            supplier: SupplierResponse | None = None, escalation_id: str | None = None,
+            steps: tuple[dict, ...] = ()) -> ActionResult:
     return ActionResult(status in ("WRITTEN", "PENDING_APPROVAL"), status, po_id, violations, supplier, message,
-                        escalation_id)
+                        escalation_id, steps)
 
 
 def _atomic(action):
@@ -59,10 +61,19 @@ def _atomic(action):
 
 
 def _refuse(conn: sqlite3.Connection, run: Run, status: str, attempt: str, entity_id: str | None, message: str,
-            violations: tuple[Violation, ...] = (), actor: str = "agent", **details) -> ActionResult:
+            violations: tuple[Violation, ...] = (), actor: str = "agent", steps: tuple[dict, ...] = (),
+            **details) -> ActionResult:
     audit(conn, run.run_id, actor, _REFUSAL_AUDIT[status], entity_id,
           {"attempt": attempt, "message": message, "violations": [asdict(v) for v in violations], **details})
-    return _result(status, message, po_id=entity_id, violations=violations)
+    return _result(status, message, po_id=entity_id, violations=violations, steps=steps)
+
+
+def _step(stage: str, status: str, detail: str, **extra) -> dict:
+    return {"stage": stage, "status": status, "detail": detail, **extra}
+
+
+def _validator_step(status: str, violations: tuple[Violation, ...]) -> dict:
+    return _step("validator", status, "; ".join(v.message for v in violations))
 
 
 def _next_id(conn: sqlite3.Connection, table: str, column: str, prefix: str) -> str:
@@ -104,20 +115,24 @@ def _gate(conn: sqlite3.Connection, run: Run, attempt: str, ctx: SkuContext, sup
     if errors:
         message = "Blocked: " + "; ".join(v.message for v in errors)
         return validation, _refuse(conn, run, "BLOCKED", attempt, entity_id, message, validation.violations,
+                                   steps=(_validator_step("BLOCKED", validation.violations),),
                                    supplier_id=supplier_id, qty=qty)
     if validation.violations and not (justification or "").strip():
         message = ("Not written: resend with a justification for these warnings: "
                    + "; ".join(v.message for v in validation.violations))
         return validation, _refuse(conn, run, "NEEDS_JUSTIFICATION", attempt, entity_id, message,
-                                   validation.violations, supplier_id=supplier_id, qty=qty)
+                                   validation.violations,
+                                   steps=(_validator_step("NEEDS_JUSTIFICATION", validation.violations),),
+                                   supplier_id=supplier_id, qty=qty)
     return validation, None
 
 
 def _route(conn: sqlite3.Connection, run: Run, po_id: str, po_value: float, audit_action: str,
-           details: dict) -> ActionResult:
+           details: dict, validation: ValidationResult) -> ActionResult:
     """Steps 4-5: a PO over the limit waits for a human (D22), any other goes straight to the supplier."""
     po = conn.execute("SELECT * FROM purchase_orders WHERE po_id = ?", (po_id,)).fetchone()
     decision = approval_for(po_value)
+    passed = _validator_step("PASSED", validation.violations)  # only justified warnings can remain here
     if not decision.auto_submit:
         conn.execute("UPDATE purchase_orders SET status = 'PENDING_APPROVAL' WHERE po_id = ?", (po_id,))
         summary = f"Approve {po_id}: {po['qty_ordered']} x {po['sku']} for ${po_value:,.2f}"
@@ -132,13 +147,17 @@ def _route(conn: sqlite3.Connection, run: Run, po_id: str, po_value: float, audi
             escalation_id = _insert_escalation(conn, run, "APPROVAL", po_id, summary, approval)
         audit(conn, run.run_id, "agent", audit_action, po_id, {**details, "outcome": "PENDING_APPROVAL"})
         return _result("PENDING_APPROVAL", f"{po_id} is held for human approval, the supplier was not contacted: "
-                       f"{decision.reason}.", po_id=po_id, escalation_id=escalation_id)
+                       f"{decision.reason}.", po_id=po_id, escalation_id=escalation_id,
+                       steps=(passed, _step("approval", "PENDING_APPROVAL", decision.reason)))
 
     conn.execute("UPDATE purchase_orders SET status = 'SUBMITTED' WHERE po_id = ?", (po_id,))
     _close_approval(conn, po_id, "WITHDRAWN")
     audit(conn, run.run_id, "agent", audit_action, po_id, {**details, "outcome": "SUBMITTED"})
     response = supplier_api.submit(conn, po_id)
-    return _result("WRITTEN", response.message, po_id=po_id, supplier=response)
+    return _result("WRITTEN", response.message, po_id=po_id, supplier=response,
+                   steps=(passed, _step("approval", "AUTO_SUBMITTED", decision.reason),
+                          _step("supplier", response.status, response.message, requested=response.requested,
+                                confirmed=response.confirmed)))
 
 
 @_atomic
@@ -171,7 +190,7 @@ def create_po(conn: sqlite3.Connection, run: Run, sku: str, supplier_id: str, qt
                   {"sku": sku, "supplier_id": supplier_id, "qty": qty, "po_value": validation.po_value,
                    "parent_po_id": parent_po_id, "daily_demand": daily_demand, "reason": reason,
                    "justification": justification,
-                   "warnings": [v.code for v in validation.violations]})
+                   "warnings": [v.code for v in validation.violations]}, validation)
 
 
 @_atomic
@@ -200,7 +219,7 @@ def modify_po(conn: sqlite3.Connection, run: Run, po_id: str, new_qty: int, dail
     return _route(conn, run, po_id, validation.po_value, "PO_MODIFIED",
                   {"old_qty": po["qty_ordered"], "new_qty": new_qty, "po_value": validation.po_value,
                    "daily_demand": daily_demand, "reason": reason, "justification": justification,
-                   "warnings": [v.code for v in validation.violations]})
+                   "warnings": [v.code for v in validation.violations]}, validation)
 
 
 @_atomic

@@ -3,6 +3,8 @@ const int = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 
 export const money = (n: number) => usd.format(n);
 export const count = (n: number) => int.format(n);
+/** 3200 -> "3.2k". */
+export const compact = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 export const seconds = (n: number) => `${n.toFixed(n < 10 ? 1 : 0)} s`;
 
 export function ordinal(n: number): string {

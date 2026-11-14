@@ -75,6 +75,7 @@ def test_s2_warnings_are_held_until_justified():
     held = actions.create_po(conn, run, "SKU-2001", "SUP-BULK", 200, 40, "cheapest option")
     assert (held.ok, held.status) == (False, "NEEDS_JUSTIFICATION")
     assert codes(held) == {"LOW_RELIABILITY_SUPPLIER", "ARRIVES_AFTER_STOCKOUT"}
+    assert [(s["stage"], s["status"]) for s in held.steps] == [("validator", "NEEDS_JUSTIFICATION")]
     assert scalar(conn, "SELECT COUNT(*) FROM purchase_orders") == pos_before
 
     blank = actions.create_po(conn, run, "SKU-2001", "SUP-BULK", 200, 40, "cheapest option", justification="  ")
@@ -83,6 +84,9 @@ def test_s2_warnings_are_held_until_justified():
     why = "Alternates cannot cover the gap and a human approved the delay risk"
     done = actions.create_po(conn, run, "SKU-2001", "SUP-BULK", 200, 40, "cheapest option", justification=why)
     assert (done.ok, done.status) == (True, "WRITTEN")
+    assert [(s["stage"], s["status"]) for s in done.steps] == [("validator", "PASSED"), ("approval", "AUTO_SUBMITTED"),
+                                                              ("supplier", done.supplier.status)]
+    assert done.steps[0]["detail"]  # the justified warnings
     assert why in scalar(conn, "SELECT notes FROM purchase_orders WHERE po_id = ?", done.po_id)
     created = scalar(conn, "SELECT details_json FROM audit_log WHERE action = 'PO_CREATED'")
     assert why in created and "LOW_RELIABILITY_SUPPLIER" in created
@@ -163,6 +167,7 @@ def test_s4_over_the_limit_waits_for_a_human_then_approve():
     run, conn = new_run("S4-BUDGET", in_memory=True)
     r = actions.create_po(conn, run, "SKU-4001", M, 396, 60, "fits the remaining budget")
     assert (r.ok, r.status, r.supplier) == (True, "PENDING_APPROVAL", None)
+    assert [(s["stage"], s["status"]) for s in r.steps] == [("validator", "PASSED"), ("approval", "PENDING_APPROVAL")]
     assert scalar(conn, "SELECT status FROM purchase_orders WHERE po_id = ?", r.po_id) == "PENDING_APPROVAL"
     esc = conn.execute("SELECT * FROM escalations WHERE escalation_id = ?", (r.escalation_id,)).fetchone()
     assert (esc["kind"], esc["status"], esc["po_id"]) == ("APPROVAL", "OPEN", r.po_id)

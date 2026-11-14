@@ -101,7 +101,7 @@ class ToolCallRecord:
     result: dict
     category: str | None
     ok: bool
-    by: str = "agent"  # "system" for facts the code preloads, "agent" for what the model chose to call
+    by: str = "agent"  # "harness" for facts the code preloads, "agent" for what the model chose to call
 
 
 @dataclass(frozen=True)
@@ -309,7 +309,8 @@ def _action_dict(r: actions.ActionResult) -> dict:
         if r.supplier.status == "REJECTED":
             ok, message = False, f"SUPPLIER REJECTED THE PO, nothing will arrive. {r.message}"
     return {"ok": ok, "status": r.status, "po_id": r.po_id, "escalation_id": r.escalation_id, "message": message,
-            "violations": [asdict(v) for v in r.violations], "shortfall": shortfall, "supplier": supplier}
+            "violations": [asdict(v) for v in r.violations], "shortfall": shortfall, "supplier": supplier,
+            "harness_steps": list(r.steps)}  # popped by the agent loop: traced, never sent to the model
 
 
 def _create_po(s: ToolSession, a: CreatePOArgs) -> dict:

@@ -39,7 +39,7 @@ export function finding(
   const running = !summary || summary.status === "running";
   if (running) {
     const turn = events.reduce((m, e) => Math.max(m, e.turn), 0);
-    const calls = events.filter((e) => e.type === "tool_call" && e.data.by !== "system").length;
+    const calls = events.filter((e) => e.type === "tool_call" && e.data.by !== "harness").length;
     return {
       verdict: "Running.",
       tone: "warn",

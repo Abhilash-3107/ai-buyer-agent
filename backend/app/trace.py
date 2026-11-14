@@ -16,8 +16,10 @@ from pathlib import Path
 class TraceEvent:
     seq: int
     turn: int  # 0 = before the first model call
-    type: str  # run_started | llm_response | tool_call | tool_result | nudge | recovered_tool_call
-    #            | budget_locked | decision | verification | flagged | run_finished | error
+    type: str  # run_started | llm_request | llm_response | tool_call | tool_result | harness_step | nudge
+    #            | recovered_tool_call | budget_locked | decision | verification | flagged | run_finished | error
+    #            llm_request: the messages added since the previous request (+ the tool list on the first one).
+    #            harness_step: a validator, approval or supplier step the code ran for one write tool call.
     data: dict  # JSON-safe
     ts: float  # seconds since run start
 

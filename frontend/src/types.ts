@@ -135,6 +135,27 @@ export interface TraceEvent {
   ts: number;
 }
 
+/* Data of the events that show how the model was driven (plan phase 8). */
+export interface ChatMessage {
+  role: "system" | "user" | "assistant" | "tool" | string;
+  content?: string | null;
+  tool_calls?: { id: string; type: string; function: { name: string; arguments: string } }[];
+  tool_call_id?: string;
+}
+
+export interface ToolDef {
+  type: string;
+  function: { name: string; description: string; parameters: Record<string, unknown> };
+}
+
+export interface HarnessStep {
+  stage: "validator" | "approval" | "supplier" | string;
+  status: string;
+  detail: string;
+  requested?: number;
+  confirmed?: number;
+}
+
 export interface EvalCheckCard {
   name: string;
   applicable: boolean;
