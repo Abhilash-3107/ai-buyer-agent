@@ -12,6 +12,7 @@ export interface Scenario {
   group: number;
   title: string;
   situation: string;
+  summary: string;
   trigger_type: string;
   expected: {
     decision: string;

@@ -55,6 +55,7 @@ class Scenario:
     group: int                 # which assignment scenario (1-4)
     title: str
     situation: str             # what the buyer/agent is told - the trigger
+    summary: str               # plain description of the case, shown in the UI only (never in the prompt)
     trigger: dict
     expected: Expected
     build: Callable[[Builder], None] = field(repr=False)
@@ -98,6 +99,7 @@ def scenario(**kw):
     title="Recommendation ignores stock on hand and inbound PO",
     situation="The replenishment engine recommends buying 800 units of Potato Chips 150g (SKU-1002) "
               "from Metro Wholesale for Dark Store North. Review the recommendation.",
+    summary="The engine wants 800 bags of chips, but it forgot the 220 on hand and 200 arriving. The real need is about 192, and 800 would not even fit in storage.",
     trigger={"type": "RECOMMENDATION_REVIEW", "rec_id": "REC-1002"},
     expected=Expected(
         decision=MODIFY,
@@ -130,6 +132,7 @@ def _s1_modify(b: Builder) -> None:
     title="Recommendation is correct",
     situation="The replenishment engine recommends buying 480 units of Sparkling Water 1L (SKU-1001) "
               "from Metro Wholesale for Dark Store North. Review the recommendation.",
+    summary="The engine wants 480 bottles of sparkling water. The math, budget and storage all check out, so the order should go ahead as is.",
     trigger={"type": "RECOMMENDATION_REVIEW", "rec_id": "REC-1001"},
     expected=Expected(
         decision=ACCEPT,
@@ -160,6 +163,7 @@ def _s1_accept(b: Builder) -> None:
     title="Already overstocked - standing order should not fire",
     situation="The replenishment engine recommends buying 400 units of Instant Noodles 70g (SKU-1003) "
               "from Metro Wholesale for Dark Store North. Review the recommendation.",
+    summary="A standing order for 400 noodles fired even though the store already has 35 days of stock. Nothing should be bought.",
     trigger={"type": "RECOMMENDATION_REVIEW", "rec_id": "REC-1003"},
     expected=Expected(
         decision=REJECT,
@@ -189,6 +193,7 @@ def _s1_reject(b: Builder) -> None:
     title="Inventory record contradicts recent receipts and sales",
     situation="The replenishment engine recommends buying 800 units of Peanut Butter 340g (SKU-1004) "
               "from Metro Wholesale for Dark Store North. Review the recommendation.",
+    summary="The system says peanut butter stock is 0, but 400 units arrived 2 days ago and sales continued. The record is probably wrong, so count before buying 800.",
     trigger={"type": "RECOMMENDATION_REVIEW", "rec_id": "REC-1004"},
     expected=Expected(
         decision=INVESTIGATE,
@@ -241,6 +246,7 @@ def _s2_short_po(b: Builder, po: str, sku: str) -> None:
     title="Short shipment leaves a gap - source the remainder from an alternate",
     situation="Metro Wholesale can only supply 250 of the 500 units on PO-2001 (Basmati Rice 5kg, "
               "SKU-2001, Dark Store North). Decide what should happen next.",
+    summary="Metro can only ship 250 of 500 bags of rice, which leaves a gap before the next delivery. Buy the rest from a fast, approved supplier, avoiding the cheap unapproved and slow ones.",
     trigger={"type": "SUPPLIER_EVENT", "event_id": "EVT-PO-2001"},
     expected=Expected(
         decision=MODIFY,
@@ -272,6 +278,7 @@ def _s2_source(b: Builder) -> None:
     title="Short shipment, but existing stock already covers demand",
     situation="Metro Wholesale can only supply 250 of the 500 units on PO-2002 (Sunflower Oil 1L, "
               "SKU-2002, Dark Store North). Decide what should happen next.",
+    summary="Metro can only ship 250 of 500 bottles of sunflower oil, but stock on hand already covers over a month. Accept the short shipment.",
     trigger={"type": "SUPPLIER_EVENT", "event_id": "EVT-PO-2002"},
     expected=Expected(
         decision=ACCEPT,
@@ -299,6 +306,7 @@ def _s2_accept(b: Builder) -> None:
     title="Alternate supplier ALSO short-confirms - agent must recover",
     situation="Metro Wholesale can only supply 250 of the 500 units on PO-2003 (Whole Wheat Flour 5kg, "
               "SKU-2003, Dark Store North). Decide what should happen next.",
+    summary="Metro ships only 250 of 500 bags of flour, and the alternate supplier then also confirms less than ordered. The agent must notice and source the rest elsewhere or escalate.",
     trigger={"type": "SUPPLIER_EVENT", "event_id": "EVT-PO-2003"},
     expected=Expected(
         decision=MODIFY,
@@ -334,6 +342,7 @@ def _s2_alt_short(b: Builder) -> None:
     title="Sustained demand increase - open PO no longer enough",
     situation="Demand alert: 7-day average sales of Electrolyte Drink 500ml (SKU-3001) at Dark Store North "
               "are ~2.5x the forecast. PO-3001 is open. Check whether the purchasing plan needs to change.",
+    summary="Electrolyte drink sales have been climbing for a week to about 2.5x the forecast. The open PO is no longer enough, so order about 420 more.",
     trigger={"type": "DEMAND_ALERT", "node_id": N, "sku": "SKU-3001"},
     expected=Expected(
         decision=MODIFY,
@@ -364,6 +373,7 @@ def _s3_spike(b: Builder) -> None:
     title="Average is inflated by a single bulk order - do not overreact",
     situation="Demand alert: 7-day average sales of Bottled Water 1L (SKU-3002) at Dark Store North are "
               "~2x the forecast. PO-3002 is open. Check whether the purchasing plan needs to change.",
+    summary="Bottled water looks 2x the forecast, but only because of one bulk order yesterday. Normal days are flat, so change nothing.",
     trigger={"type": "DEMAND_ALERT", "node_id": N, "sku": "SKU-3002"},
     expected=Expected(
         decision=ACCEPT,
@@ -393,6 +403,7 @@ def _s3_oneoff(b: Builder) -> None:
     title="Spike is explained by a promotion that ends tomorrow",
     situation="Demand alert: 7-day average sales of Energy Drink 250ml (SKU-3003) at Dark Store North are "
               "~2.9x the forecast. PO-3003 is open. Check whether the purchasing plan needs to change.",
+    summary="Energy drink sales are 2.9x the forecast because of a promotion that ends tomorrow. Stock covers the last promo days, so change nothing.",
     trigger={"type": "DEMAND_ALERT", "node_id": N, "sku": "SKU-3003"},
     expected=Expected(
         decision=ACCEPT,
@@ -425,6 +436,7 @@ def _s3_promo(b: Builder) -> None:
     title="Need is real but exceeds the remaining category budget",
     situation="The replenishment engine recommends buying 576 units of Extra Virgin Olive Oil 1L (SKU-4001) "
               "from Metro Wholesale for Dark Store North. Review and act.",
+    summary="Olive oil really needs 576 units, but the category budget only covers 396. Buy 396 and ask for a budget increase for the rest.",
     trigger={"type": "RECOMMENDATION_REVIEW", "rec_id": "REC-4001"},
     expected=Expected(
         decision=MODIFY,
@@ -456,6 +468,7 @@ def _s4_budget(b: Builder) -> None:
     title="Primary supplier's MOQ would force buying more than can sell before expiry",
     situation="The replenishment engine recommends buying 180 units of Fresh Paneer 200g (SKU-4002) from "
               "DairyDirect for Dark Store North. Review and act.",
+    summary="Paneer needs 42 units, but DairyDirect's minimum order is 180 and paneer expires in 10 days. Buy 42 from FarmFresh at a slightly higher price instead.",
     trigger={"type": "RECOMMENDATION_REVIEW", "rec_id": "REC-4002"},
     expected=Expected(
         decision=MODIFY,

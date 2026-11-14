@@ -50,7 +50,7 @@ export function RunView({ scenario, runs, runId, health, starting, startError, o
       <header className="title-row">
         <div className="title-block">
           <h1>{scenario.title}</h1>
-          <p className="situation">{scenario.situation}</p>
+          <p className="situation">{scenario.summary}</p>
           <p className="meta">
             <span className="mono">{scenario.id}</span>
             {" · "}

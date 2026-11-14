@@ -69,7 +69,7 @@ def test_health_and_scenarios(client):
     listed = client.get("/api/scenarios").json()
     assert [s["id"] for s in listed] == list(SCENARIOS)
     s4 = next(s for s in listed if s["id"] == "S4-BUDGET")
-    assert set(s4) == {"id", "group", "title", "situation", "trigger_type", "expected"}
+    assert set(s4) == {"id", "group", "title", "situation", "summary", "trigger_type", "expected"}
     assert s4["trigger_type"] == "RECOMMENDATION_REVIEW" and s4["group"] == 4
     assert s4["expected"] == {"decision": "MODIFY", "new_buy_qty": [120, 396], "allowed_suppliers": ["SUP-METRO"],
                               "escalation": "BUDGET_INCREASE", "worked_example": SCENARIOS["S4-BUDGET"].expected.worked_example}

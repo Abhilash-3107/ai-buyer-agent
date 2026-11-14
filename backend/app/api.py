@@ -259,6 +259,7 @@ def health() -> dict:
 @app.get("/api/scenarios")
 def scenarios() -> list[dict]:
     return [{"id": s.id, "group": s.group, "title": s.title, "situation": s.situation,
+             "summary": s.summary,
              "trigger_type": s.trigger["type"],
              "expected": {"decision": s.expected.decision, "new_buy_qty": list(s.expected.new_buy_qty),
                           "allowed_suppliers": list(s.expected.allowed_suppliers) if s.expected.allowed_suppliers else None,
