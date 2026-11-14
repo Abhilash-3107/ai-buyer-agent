@@ -180,7 +180,8 @@ def _totals(live: Live) -> dict:
 def _scorecard(live: Live) -> dict | None:
     c = live.scorecard
     return c and {"passed": c["passed"], "checks": c["checks"], "new_buy_units": c["new_buy_units"],
-                  "info_read_by_agent": c["info_read_by_agent"]}
+                  # runs saved before phase 9 have info_read_by_agent and no repeat count
+                  "info_read": c.get("info_read", c.get("info_read_by_agent", [])), "repeat_reads": c.get("repeat_reads")}
 
 
 def _rows(live: Live, sql: str, *params) -> list[dict]:

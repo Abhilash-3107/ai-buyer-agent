@@ -35,16 +35,13 @@ def test_s1_modify_happy_path():
 
     assert result.outcome == "DECIDED" and result.verification.passed and result.decision.decision == "MODIFY"
     assert result.steps == 4 and (result.tokens_in, result.tokens_out) == (400, 40)
-    # the code preloads the trigger, the core snapshot, suppliers, budget and storage before the first model call
-    system_calls = [e.data["name"] for e in events if e.type == "tool_call" and e.data["by"] == "harness"]
-    assert system_calls == ["get_recommendation", "get_product", "get_inventory", "get_purchase_orders",
-                            "get_forecast", "get_sales_history", "get_suppliers", "get_budget",
-                            "get_storage"]
-    assert all(e.turn == 0 for e in events if e.data.get("by") == "harness")
+    # nothing is read before the first model call: every tool call is the model's (D61)
+    assert not [e for e in events if e.turn == 0 and e.type in ("tool_call", "tool_result")]
+    assert all(e.data["by"] == "agent" for e in events if e.type == "tool_call")
     agent_calls = [e.data["name"] for e in events if e.type == "tool_call" and e.data["by"] == "agent"]
     assert agent_calls == ["plan_order", "create_po", "create_po", "submit_decision"]
     assert [r["status"] for r in results(events, "create_po")] == ["BLOCKED", "WRITTEN"]
-    assert [c.by for c in result.tool_calls] == ["harness"] * 9 + ["agent"] * 3
+    assert [c.name for c in result.tool_calls] == ["plan_order", "create_po", "create_po"]
     types = [e.type for e in events]
     assert types[0] == "run_started" and types[-1] == "run_finished"
     assert types.index("decision") < types.index("verification") < types.index("run_finished")
@@ -98,7 +95,7 @@ def request_steps(events):
             if e.type == "harness_step" and e.data["stage"] == "request"]
 
 
-def test_every_agent_call_gets_a_request_step_before_its_write_steps_and_preloads_get_none():
+def test_every_agent_call_gets_a_request_step_before_its_write_steps():
     result, events = run([reply(call("create_po", {**S1, "qty": 192}, "w1"), call("get_budget", {"sku": "SKU-1002"}, "r1")),
                           reply(call("submit_decision", submit("MODIFY", 192)[1], "s1"))])
     assert request_steps(events) == [(c, "ACCEPTED", "Known tool, arguments valid") for c in ("w1", "r1", "s1")]
@@ -125,7 +122,7 @@ def test_rejected_and_locked_requests_are_traced_and_nothing_runs():
     rejected = {"u", "i", "m", "l", "s"}
     assert not [e for e in events if e.type == "harness_step" and e.data["call_id"] in rejected and e.data["stage"] != "request"]
     assert result.conn.execute("SELECT COUNT(*) FROM purchase_orders WHERE created_by = 'agent'").fetchone()[0] == 0
-    assert [(c.name, c.category, c.ok) for c in result.tool_calls[9:]] == [
+    assert [(c.name, c.category, c.ok) for c in result.tool_calls] == [
         ("create_po", None, False)] * 3 + [("buy_everything", None, False), ("get_budget", "budget", False)]
 
 

@@ -43,3 +43,12 @@ def submit(decision="ACCEPT", new_units=0, demand=40.0, **over) -> tuple:
     args = {"decision": decision, "new_units": new_units, "daily_demand_used": demand,
             "key_factors": ["a fact"], "actions_taken": ["did it"], "confidence": "high", "summary": "Done."}
     return call("submit_decision", {**args, **over})
+
+
+FACT_TOOLS = ("get_product", "get_inventory", "get_purchase_orders", "get_forecast", "get_sales_history",
+              "get_suppliers", "get_budget", "get_storage")
+
+
+def investigate(sku: str) -> NS:
+    """One turn that reads every fact about a SKU, as a model that batches its reads would."""
+    return reply(*(call(name, {"sku": sku}) for name in FACT_TOOLS))

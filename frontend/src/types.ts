@@ -90,7 +90,8 @@ export interface RunSummary {
     passed: boolean;
     checks: Check[];
     new_buy_units: number;
-    info_read_by_agent: string[];
+    info_read: string[];
+    repeat_reads: number | null;
   } | null;
   purchase_orders: PurchaseOrder[];
   escalations: Escalation[];

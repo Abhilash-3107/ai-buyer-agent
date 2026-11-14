@@ -113,8 +113,8 @@ def render_report(name: str, cards: list[dict], repeats: int, agent_version: dic
     lines += ["", "## Scenarios", "",
               "A check shows ✓ when every repeat passed, ✗ when none did, k/n when mixed, and - when it did not apply.",
               "Consistency is how many runs gave the most common decision.",
-              "Read by agent lists the information categories the model fetched itself (any repeat), beyond the preload.", "",
-              "| Scenario | Expected | Got | New units (band) | " + " | ".join(CHECK_NAMES) + " | Consistency | Read by agent |",
+              "Repeat reads counts, per run, the reads that repeated an earlier successful read with the same arguments.", "",
+              "| Scenario | Expected | Got | New units (band) | " + " | ".join(CHECK_NAMES) + " | Consistency | Repeat reads |",
               "|---|---|---|---|" + "---|" * len(CHECK_NAMES) + "---|---|"]
     for scenario_id, group in _by_scenario(cards).items():
         exp = SCENARIOS[scenario_id].expected
@@ -124,7 +124,7 @@ def render_report(name: str, cards: list[dict], repeats: int, agent_version: dic
         units = ", ".join(str(c["new_buy_units"]) for c in group)
         lines.append(f"| {scenario_id} | {exp.decision} | {got} | {units} ({band}) | "
                      + " | ".join(_mark([_check(c, n) for c in group]) for n in CHECK_NAMES) + f" | {k}/{len(group)} | "
-                     + (", ".join(sorted({cat for c in group for cat in c["info_read_by_agent"]})) or "none") + " |")
+                     + ", ".join(str(c.get("repeat_reads", "-")) for c in group) + " |")
 
     lines += ["", "## Why it failed", ""]
     failures = [(c, ch) for c in cards for ch in c["checks"] if ch["applicable"] and not ch["passed"]]

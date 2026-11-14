@@ -23,7 +23,6 @@ from .llm import LLMClient, ToolCall, tool_result_message
 from .prompts import (
     NUDGE,
     NUDGE_JSON,
-    SNAPSHOT_TOOLS,
     SYSTEM_PROMPT,
     WRITES_LOCKED,
     findings_message,
@@ -44,8 +43,15 @@ SUSPICIOUS_INPUT_TOKENS = (2048, 4096, 8192, 16384, 32768, 65536, 131072)
 class SubmitDecisionArgs(BaseModel):
     """The agent's structured final answer; the verifier checks it against the database."""
     model_config = ConfigDict(extra="forbid")
-    decision: Literal["ACCEPT", "MODIFY", "REJECT", "INVESTIGATE"]
-    new_units: int = Field(ge=0, description="Units that will ARRIVE from POs you created or increased (0 if none)")
+    decision: Literal["ACCEPT", "MODIFY", "REJECT", "INVESTIGATE"] = Field(description=(
+        "ACCEPT: what the trigger proposes (a recommended order, a supplier's changed confirmation) or, if it "
+        "proposes nothing, the current plan stands as it is; you carried it out if it needed carrying out. "
+        "MODIFY: you changed purchasing beyond what the trigger proposed: you created, resized or cancelled a PO. "
+        "REJECT: the proposal should not be carried out, and you bought nothing. "
+        "INVESTIGATE: the data cannot support a decision; you escalated it for investigation and bought nothing."))
+    new_units: int = Field(ge=0, description=(
+        "Units that will ARRIVE from POs you created or increased, using the supplier's confirmed quantity, "
+        "not what you asked for. 0 if none."))
     daily_demand_used: float | None = Field(description="The daily demand assumption behind the decision")
     key_factors: list[str] = Field(min_length=1, max_length=5, description="Short facts that drove the decision")
     actions_taken: list[str] = Field(description="PO ids and escalation ids, and what happened to each")
@@ -71,7 +77,7 @@ class AgentResult:
     latency_s: float
     trace_path: Path | None
     conn: sqlite3.Connection  # the run's database, for the caller to inspect
-    tool_calls: tuple[ToolCallRecord, ...]  # every tool call, preloaded or chosen
+    tool_calls: tuple[ToolCallRecord, ...]  # every tool call the model made
 
 
 def _readable(error: ValidationError) -> str:
@@ -115,30 +121,6 @@ def _recover_call(text: str | None, turn: int) -> tuple[ToolCall | None, bool]:
     return ToolCall(f"recovered-{turn}", name, args, json.dumps(args)), True
 
 
-def _preload(session: ToolSession, trace: Trace, scenario_trigger: dict) -> dict:
-    """Read what needs no judgement (the trigger's details, the product facts, suppliers, budget and storage) before the first model call."""
-    conn, run = session.conn, session.run
-
-    def read(name: str, args: dict) -> dict:
-        trace.emit("tool_call", 0, name=name, args=args, by="harness")
-        result = session.call(name, args, by="harness")
-        trace.emit("tool_result", 0, name=name, ok=result["ok"], result=result, by="harness")
-        return result
-
-    kind = scenario_trigger["type"]
-    if kind == "RECOMMENDATION_REVIEW":
-        details = read("get_recommendation", {"rec_id": scenario_trigger["rec_id"]})
-    elif kind == "SUPPLIER_EVENT":
-        po_id = conn.execute("SELECT po_id FROM supplier_events WHERE event_id = ?",
-                             (scenario_trigger["event_id"],)).fetchone()[0]
-        details = read("get_supplier_events", {"po_id": po_id})
-    else:
-        details = scenario_trigger
-    snapshot = {name: read(name, {"sku": run.sku}) for name in SNAPSHOT_TOOLS}
-    node_name = conn.execute("SELECT name FROM nodes WHERE node_id = ?", (run.node_id,)).fetchone()[0]
-    return {"node_name": node_name, "trigger_details": details, **snapshot}
-
-
 def run_agent(scenario_id: str, llm: LLMClient, *, max_turns: int = 30,
               on_event: Callable[[TraceEvent], None] | None = None, in_memory: bool = False) -> AgentResult:
     started = time.perf_counter()
@@ -151,7 +133,7 @@ def run_agent(scenario_id: str, llm: LLMClient, *, max_turns: int = 30,
                trigger=scenario.trigger)
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_message(scenario, run, _preload(session, trace, scenario.trigger))}]
+                {"role": "user", "content": user_message(conn, scenario, run)}]
     tools = session.openai_tools() + [SUBMIT_TOOL]
 
     outcome, decision, verification = "MAX_STEPS", None, VerificationResult(True, ())

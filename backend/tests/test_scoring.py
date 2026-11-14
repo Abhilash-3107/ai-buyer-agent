@@ -1,7 +1,7 @@
 """The scorer on scripted runs and hand-built final states: it must pass good behaviour and fail each kind of bad one."""
 from dataclasses import replace
 
-from scripted import call, reply, scripted_llm, submit
+from scripted import call, investigate, reply, scripted_llm, submit
 
 from app.agent import run_agent
 from app.scenarios import SCENARIOS
@@ -12,8 +12,7 @@ S2 = {"sku": "SKU-2003", "daily_demand": 40, "reason": "r"}
 S4 = {"sku": "SKU-4001", "supplier_id": "SUP-METRO", "daily_demand": 60, "reason": "r"}
 
 
-def reads(sku):
-    return reply(call("get_suppliers", {"sku": sku}), call("get_budget", {"sku": sku}), call("get_storage", {"sku": sku}))
+reads = investigate
 
 
 def play(scenario_id, script):
@@ -35,8 +34,8 @@ def test_s1_modify_with_a_blocked_800_then_192_passes_everything():
     assert card.passed and card.new_buy_units == 192 and card.blocked_writes == 1
     assert [c.name for c in card.checks] == list(CHECK_NAMES)
     assert check(card, "recovery").applicable and "1 failed writes" in check(card, "recovery").reason
-    assert card.info_read_by_agent == ("budget", "storage", "suppliers")
-    assert card.tool_calls == 5 and card.turns == 4
+    assert card.info_read == ("budget", "forecast", "inventory", "open_pos", "sales_history", "storage", "suppliers")
+    assert card.tool_calls == 10 and card.turns == 4 and card.repeat_reads == 0  # 8 reads + 2 writes
 
 
 def test_s1_modify_that_only_tried_800_fails_action_and_recovery():
@@ -57,7 +56,8 @@ def test_a_po_to_an_unapproved_supplier_fails_constraints():
 
 def test_s2_alt_top_up_after_a_short_confirmation_passes():
     _, card = play("S2-ALT-ALSO-SHORT", [
-        reads("SKU-2003"), reply(call("create_po", {**S2, "supplier_id": "SUP-QUICK", "qty": 90})),
+        reads("SKU-2003"), reply(call("get_supplier_events", {"po_id": "PO-2003"})),
+        reply(call("create_po", {**S2, "supplier_id": "SUP-QUICK", "qty": 90})),
         reply(call("create_po", {**S2, "supplier_id": "SUP-RAPIDO", "qty": 50, "parent_po_id": "PO-A001"})),
         reply(submit("MODIFY", 90))])
     assert card.passed and card.new_buy_units == 90
@@ -88,7 +88,7 @@ def test_s4_budget_without_the_escalation_fails_action_naming_it():
 
 
 def test_do_nothing_passes_a_reject_scenario_and_any_buy_fails_it():
-    _, card = play("S1-REJECT", [reply(submit("REJECT", 0))])
+    _, card = play("S1-REJECT", [reads("SKU-1003"), reply(submit("REJECT", 0))])
     assert card.passed and not check(card, "recovery").applicable
     buy = {"sku": "SKU-1003", "supplier_id": "SUP-METRO", "qty": 480, "daily_demand": 20, "reason": "r",
            "justification": "j"}
@@ -97,8 +97,8 @@ def test_do_nothing_passes_a_reject_scenario_and_any_buy_fails_it():
 
 
 def test_information_is_missing_when_a_required_category_was_never_read():
-    _, card = play("S1-REJECT", [reply(submit("REJECT", 0))])  # the preload alone covers inventory, forecast, open_pos
-    assert check(card, "information").passed and card.info_read_by_agent == ()
+    _, card = play("S1-REJECT", [reply(submit("REJECT", 0))])  # nothing is read for the agent any more
+    assert check(card, "information").reason == "never read: forecast, inventory, open_pos" and card.info_read == ()
     full, card = play("S1-MODIFY", [reads("SKU-1002"), reply(call("create_po", {**S1, "qty": 192})),
                                     reply(submit("MODIFY", 192))])
     assert check(card, "information").passed
@@ -135,3 +135,10 @@ def test_a_po_to_a_supplier_that_does_not_offer_the_sku_says_so():
                         "6.9, 'SUBMITTED', '2026-11-14', '2026-11-11', 'agent', NULL, NULL)")
     reason = check(score_run(SCENARIOS["S2-SOURCE-ELSEWHERE"], result), "constraints").reason
     assert "SUP-DAIRY" in reason and "does not offer SKU-2001 at all" in reason
+
+
+def test_repeat_reads_count_the_same_read_done_again():
+    _, card = play("S1-REJECT", [reads("SKU-1003"), reads("SKU-1003"),
+                                 reply(call("get_sales_history", {"sku": "SKU-1003", "days": 14})),
+                                 reply(submit("REJECT", 0))])
+    assert card.repeat_reads == 8 and card.passed  # reported, never failed on; other arguments are a new read

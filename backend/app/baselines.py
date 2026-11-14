@@ -1,7 +1,7 @@
 """Two deliberately dumb policies that prove the eval can tell good behaviour from bad (D38).
 
 Each baseline stands in for the LLM: it answers `run_agent`'s model calls with a fixed plan of tool calls.
-So the preload, the write pipeline, the verifier and the trace are exactly the ones the real agent gets,
+So the prompt, the write pipeline, the verifier and the trace are exactly the ones the real agent gets,
 and `score_run` scores the result unchanged.
 """
 from __future__ import annotations
@@ -12,7 +12,7 @@ from collections.abc import Callable, Generator
 
 from .llm import LLMClient, LLMConfig, LLMResponse, ToolCall
 
-# A policy gets the preloaded prompt and yields one batch of (tool name, arguments) per model turn.
+# A policy gets the trigger (type and its ## Trigger JSON) and yields one batch of (tool name, arguments) per model turn.
 # It receives the previous batch's results back from `yield`.
 Batch = list[tuple[str, dict]]
 Policy = Callable[[str, dict], Generator[Batch, list[dict], None]]
@@ -32,23 +32,25 @@ def _units(result: dict, qty: int) -> int:
     return qty if result.get("ok") else 0
 
 
-def do_nothing(trigger: str, snapshot: dict) -> Generator[Batch, list[dict], None]:
+def do_nothing(trigger: str, details: dict) -> Generator[Batch, list[dict], None]:
     """Never writes anything, rejects every trigger."""
     while True:
         yield [_submit("REJECT", 0, None, ["did nothing"])]
 
 
-def rubber_stamp(trigger: str, snapshot: dict) -> Generator[Batch, list[dict], None]:
+def rubber_stamp(trigger: str, details: dict) -> Generator[Batch, list[dict], None]:
     """Does what the trigger implies without thinking, and always says ACCEPT."""
-    details, mean_7d = snapshot["trigger_details"], snapshot["get_sales_history"]["demand_stats"]["mean_7d"]
     units, demand, note = 0, None, "no purchase"
     if trigger == "SUPPLIER_EVENT":  # the supplier is short: take what it can ship
-        yield [("accept_partial_confirmation", {"po_id": details["events"][0]["po_id"],
+        yield [("accept_partial_confirmation", {"po_id": details["po_id"],
                                                 "reason": "Accepting the supplier's partial confirmation."})]
         note = "accepted the partial confirmation"
     else:
+        (sales,) = yield [("get_sales_history", {"sku": details["sku"]})]
+        mean_7d = sales["demand_stats"]["mean_7d"]
         if trigger == "RECOMMENDATION_REVIEW":  # buy exactly what the engine recommends
-            sku, supplier, qty = details["sku"], details["supplier_id"], details["recommended_qty"]
+            (rec,) = yield [("get_recommendation", {"rec_id": details["rec_id"]})]
+            sku, supplier, qty = rec["sku"], rec["supplier_id"], rec["recommended_qty"]
         else:  # DEMAND_ALERT: plan an order at the 7-day mean from the primary supplier
             sku = details["sku"]
             (suppliers,) = yield [("get_suppliers", {"sku": sku})]
@@ -81,9 +83,8 @@ class BaselineClient:
         self._turn += 1
         if self._plan is None:
             prompt = messages[1]["content"]
-            snapshot = {name: json.loads(body) for name, body in re.findall(r"### (\w+)\n(.*)", prompt)}
-            snapshot["trigger_details"] = json.loads(re.search(r"## Trigger details\n(.*)", prompt).group(1))
-            self._plan = self._policy(re.search(r"Trigger: (\w+)", prompt).group(1), snapshot)
+            details = json.loads(re.search(r"## Trigger\n(.*)", prompt).group(1))
+            self._plan = self._policy(re.search(r"Trigger: (\w+)", prompt).group(1), details)
             batch = next(self._plan)
         else:
             last = []

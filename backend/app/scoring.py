@@ -5,6 +5,7 @@ it reads only the run database, the tool call records and the AgentResult.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 from .agent import AgentResult
@@ -37,13 +38,14 @@ class ScoreCard:
     decision: str | None
     new_buy_units: int
     turns: int
-    tool_calls: int  # calls the model chose to make (the system preload is not counted)
+    tool_calls: int  # every call the model made
     blocked_writes: int
     tokens_in: int
     tokens_out: int
     latency_s: float
     verifier_findings: tuple[str, ...]
-    info_read_by_agent: tuple[str, ...]  # every category the agent chose to fetch itself, beyond the preload (D35)
+    info_read: tuple[str, ...]  # every information category the agent read
+    repeat_reads: int  # read calls that repeated an earlier successful read with the same arguments
 
 
 def _band(lo: int, hi: int) -> str:
@@ -60,15 +62,23 @@ def _decision(scenario: Scenario, result: AgentResult) -> Check:
 def _information(scenario: Scenario, result: AgentResult) -> tuple[Check, tuple[str, ...]]:
     required = set(scenario.expected.required_info)
     read = {r.category for r in result.tool_calls if r.ok and r.category}
-    by_agent = {r.category for r in result.tool_calls if r.ok and r.category and r.by == "agent"}
     missing = sorted(required - read)
-    own = tuple(sorted(required & by_agent))
-    chosen = tuple(sorted(by_agent))
     if missing:
-        return Check("information", True, False, f"never read: {', '.join(missing)}"), chosen
-    return Check("information", True, True,
-                 f"all {len(required)} required categories read; the agent itself read "
-                 f"{', '.join(own) if own else 'none of them'}"), chosen
+        return Check("information", True, False, f"never read: {', '.join(missing)}"), tuple(sorted(read))
+    return Check("information", True, True, f"all {len(required)} required categories read"), tuple(sorted(read))
+
+
+def _repeat_reads(calls: tuple[ToolCallRecord, ...]) -> int:
+    """Reads the model had already done: same tool, same arguments, after a successful one."""
+    seen, repeats = set(), 0
+    for r in calls:
+        if r.name not in TOOLS or TOOLS[r.name].kind != "read":
+            continue
+        key = (r.name, json.dumps(r.args, sort_keys=True))
+        repeats += key in seen
+        if r.ok:
+            seen.add(key)
+    return repeats
 
 
 def _constraints(result: AgentResult) -> Check:
@@ -129,7 +139,7 @@ def _is_write(record: ToolCallRecord) -> bool:
 def _recovery(result: AgentResult, action_passed: bool) -> Check:
     """A failure is recovered by a later successful write or escalation, or by rightly giving up: the run
     ended DECIDED and the action check passed (for example a refused PO followed by a correct REJECT)."""
-    writes = [r for r in result.tool_calls if r.by == "agent" and _is_write(r)]
+    writes = [r for r in result.tool_calls if _is_write(r)]
     failures = [i for i, r in enumerate(writes) if _failed(r)]
     if not failures:
         return Check("recovery", False, True, "no write failed, nothing to recover from")
@@ -147,11 +157,11 @@ def _recovery(result: AgentResult, action_passed: bool) -> Check:
 
 def score_run(scenario: Scenario, result: AgentResult, model: str = "") -> ScoreCard:
     units = new_units(result.conn, result.run)
-    information, own = _information(scenario, result)
+    information, read = _information(scenario, result)
     action = _action(scenario, result, units)
     checks = (_decision(scenario, result), information, _constraints(result), action,
               _validation(result), _recovery(result, action.passed))
-    agent_calls = [r for r in result.tool_calls if r.by == "agent"]
+    agent_calls = result.tool_calls
     return ScoreCard(
         scenario_id=scenario.id, run_id=result.run.run_id, model=model, checks=checks,
         passed=all(c.passed for c in checks if c.applicable), outcome=result.outcome,
@@ -160,4 +170,4 @@ def score_run(scenario: Scenario, result: AgentResult, model: str = "") -> Score
         blocked_writes=sum(1 for r in agent_calls if r.result.get("status") in REFUSED),
         tokens_in=result.tokens_in, tokens_out=result.tokens_out, latency_s=result.latency_s,
         verifier_findings=tuple(f"{f.code}: {f.message}" for f in result.verification.findings),
-        info_read_by_agent=own)
+        info_read=read, repeat_reads=_repeat_reads(agent_calls))

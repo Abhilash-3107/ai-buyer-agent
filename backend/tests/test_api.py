@@ -8,7 +8,7 @@ import time
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from scripted import call, reply, scripted_llm, submit
+from scripted import call, investigate, reply, scripted_llm, submit
 
 from app import actions, api, runs
 from app.scenarios import SCENARIOS
@@ -30,8 +30,7 @@ def use_script(monkeypatch, *script):
     monkeypatch.setattr(api, "make_client", lambda: scripted_llm(list(script)))
 
 
-S1_SCRIPT = [reply(call("get_suppliers", {"sku": "SKU-1002"}), call("get_budget", {"sku": "SKU-1002"}),
-                  call("get_storage", {"sku": "SKU-1002"})),
+S1_SCRIPT = [investigate("SKU-1002"),
              reply(call("create_po", {**S1, "qty": 800})), reply(call("create_po", {**S1, "qty": 192})),
              reply(submit("MODIFY", 192))]
 S4_SCRIPT = [reply(call("create_po", {**S4, "qty": 396})),
@@ -222,6 +221,22 @@ def test_history_survives_a_server_restart(client, monkeypatch):
     assert [r["run_id"] for r in client.get("/api/runs").json()] == [run_id]
     esc = pending_escalation(before)
     assert client.post(f"/api/runs/{run_id}/escalations/{esc['escalation_id']}/approve", json={}).status_code == 200
+
+
+def test_a_run_saved_before_phase_9_still_opens(client, monkeypatch):
+    use_script(monkeypatch, *S1_SCRIPT)
+    run_id = start(client)
+    read_events(client, run_id)
+    side = next(api.runs.RUNS_DIR.glob(f"*__{run_id}.api.json"))
+    saved = json.loads(side.read_text())
+    card = saved["scorecard"]
+    card["info_read_by_agent"] = card.pop("info_read")
+    del card["repeat_reads"]
+    side.write_text(json.dumps(saved))
+
+    monkeypatch.setattr(api, "REGISTRY", {})
+    s = client.get(f"/api/runs/{run_id}").json()
+    assert s["scorecard"]["info_read"] and s["scorecard"]["repeat_reads"] is None
 
 
 def test_demo_mode_runs_end_to_end_with_a_baseline(client, monkeypatch):

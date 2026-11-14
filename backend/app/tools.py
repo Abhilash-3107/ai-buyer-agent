@@ -101,7 +101,6 @@ class ToolCallRecord:
     result: dict
     category: str | None
     ok: bool
-    by: str = "agent"  # "harness" for facts the code preloads, "agent" for what the model chose to call
 
 
 @dataclass(frozen=True)
@@ -163,7 +162,7 @@ class ToolSession:
         except ValidationError as e:
             return f"Invalid arguments for {name}: {_readable(e)}"
 
-    def call(self, name: str, args: dict, by: str = "agent", checked: tuple[Tool, BaseModel] | str | None = None) -> dict:
+    def call(self, name: str, args: dict, checked: tuple[Tool, BaseModel] | str | None = None) -> dict:
         """Run one tool. Never raises on bad model input. `checked` is a `check` result the caller already has."""
         checked = self.check(name, args) if checked is None else checked
         if isinstance(checked, str):
@@ -175,7 +174,7 @@ class ToolSession:
             except ToolError as e:
                 result = {"ok": False, "error": str(e)}
         tool = TOOLS.get(name)
-        self.calls.append(ToolCallRecord(name, args, result, tool.category if tool else None, result["ok"], by))
+        self.calls.append(ToolCallRecord(name, args, result, tool.category if tool else None, result["ok"]))
         return result
 
     def openai_tools(self) -> list[dict]:
@@ -345,6 +344,13 @@ def _escalate(s: ToolSession, a: EscalateArgs) -> dict:
     return _action_dict(actions.escalate(s.conn, s.run, a.kind, a.summary, a.details, a.po_id))
 
 
+# What every PO write returns, in the tool description so the model knows the contract before it writes.
+_WRITE_RESULT = ("The result status is one of: BLOCKED (a hard rule was broken; the violations say which, nothing "
+                 "was written), NEEDS_JUSTIFICATION (allowed but unusual; change it, or call again with the same "
+                 "arguments plus a justification), PENDING_APPROVAL (above the approval limit, waiting for a human; "
+                 "this is expected) or WRITTEN. A submitted PO returns the supplier block: status, requested, "
+                 "confirmed and shortfall. Only the confirmed quantity will arrive.")
+
 _TOOL_LIST = [
     Tool("get_recommendation", "The replenishment engine's recommendation and the reason it gives. "
          "The engine is not guaranteed to be right.", RecArgs, None, "read", _get_recommendation),
@@ -372,15 +378,16 @@ _TOOL_LIST = [
     Tool("plan_order", "Order-up-to calculator for a supplier and a daily demand you choose: target, position, "
          "net need, suggested quantity, every limit and the binding one, stockout day without the order.",
          PlanArgs, None, "calc", _plan_order),
-    Tool("create_po", "Create a purchase order. It is validated first; errors block it, warnings need a "
-         "justification, a PO above the approval limit waits for a human, and otherwise it is submitted and "
-         "the supplier's confirmation is returned.", CreatePOArgs, None, "write", _create_po),
-    Tool("modify_po", "Change the quantity of a PENDING_APPROVAL or SUBMITTED PO. Validated like a new PO.",
-         ModifyPOArgs, None, "write", _modify_po),
+    Tool("create_po", "Create a purchase order. It is validated before anything is written. " + _WRITE_RESULT,
+         CreatePOArgs, None, "write", _create_po),
+    Tool("modify_po", "Change the quantity of a PENDING_APPROVAL or SUBMITTED PO. Validated like a new PO. "
+         + _WRITE_RESULT, ModifyPOArgs, None, "write", _modify_po),
     Tool("accept_partial_confirmation", "Accept what the supplier can ship on a PARTIALLY_CONFIRMED PO.",
          PORefArgs, None, "write", _accept_partial),
     Tool("cancel_po", "Cancel an open PO.", PORefArgs, None, "write", _cancel_po),
-    Tool("escalate_to_human", "Ask a human to decide or investigate. Kinds: INVESTIGATION, BUDGET_INCREASE, "
-         "SUPPLIER_ISSUE, OTHER.", EscalateArgs, None, "write", _escalate),
+    Tool("escalate_to_human", "Ask a human to decide or act. Kinds: INVESTIGATION (the data cannot be trusted or "
+         "contradicts itself), BUDGET_INCREASE (the remaining budget is too small for what is needed), "
+         "SUPPLIER_ISSUE (no approved supplier can cover the need in time), OTHER. Put the key numbers in the "
+         "summary.", EscalateArgs, None, "write", _escalate),
 ]
 TOOLS: dict[str, Tool] = {t.name: t for t in _TOOL_LIST}

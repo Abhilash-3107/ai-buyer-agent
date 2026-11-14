@@ -4,7 +4,7 @@ import json
 import re
 
 import pytest
-from scripted import call, reply, scripted_llm, submit
+from scripted import call, investigate, reply, scripted_llm, submit
 
 from app import evaluate as evaluate_module
 from app import runs
@@ -26,11 +26,14 @@ def baseline_cards(name):
     return evaluate(name, lambda: BaselineClient(name), list(SCENARIOS), 1, log=lambda m: None)
 
 
-def test_do_nothing_passes_exactly_the_scenarios_that_expect_no_action_and_a_reject():
-    passed = {c.scenario_id for c in baseline_cards("do_nothing") if c.passed}
+def test_do_nothing_passes_nothing_and_on_a_reject_only_misses_the_investigation():
+    cards = baseline_cards("do_nothing")
+    assert not any(c.passed for c in cards)
     wanted = {s.id for s in SCENARIOS.values()
               if s.expected.decision == "REJECT" and s.expected.new_buy_qty == (0, 0) and s.expected.escalation is None}
-    assert passed == wanted and passed
+    right = {c.scenario_id for c in cards
+             if [ch.name for ch in c.checks if ch.applicable and not ch.passed] == ["information"]}
+    assert right == wanted and right
 
 
 def test_rubber_stamp_runs_everything_and_fails_s1_modify():
@@ -41,8 +44,7 @@ def test_rubber_stamp_runs_everything_and_fails_s1_modify():
 
 
 def scripted_client_factory():
-    scripts = {"good": [reply(call("get_suppliers", {"sku": "SKU-1002"}), call("get_budget", {"sku": "SKU-1002"}),
-                                call("get_storage", {"sku": "SKU-1002"})),
+    scripts = {"good": [investigate("SKU-1002"), reply(call("get_budget", {"sku": "SKU-1002"})),
                         reply(call("create_po", {**S1, "qty": 192})), reply(submit("MODIFY", 192))],
                "bad": [reply(submit("REJECT", 0, demand=None)), reply(submit("REJECT", 0, demand=None))]}
     order = iter(["good", "bad"])
@@ -101,11 +103,13 @@ def test_cli_baseline_then_compare(tmp_path):
     assert "do_nothing" in table and "rubber_stamp" in table and "S1-REJECT" in table
 
 
-def test_report_lists_the_categories_the_agent_read_itself(tmp_path):
+def test_report_counts_repeat_reads(tmp_path):
     cards = evaluate("scripted", scripted_client_factory(), ["S1-MODIFY", "S1-ACCEPT"], 1, log=lambda m: None)
     write_eval(tmp_path, "scripted", "model", cards, 1, 0.0)
     report = (tmp_path / "scripted.md").read_text()
-    assert "Read by agent" in report and "| budget, storage, suppliers |" in report and "| none |" in report
+    assert "Repeat reads" in report and "preload" not in report
+    rows = {line.split(" | ")[0].lstrip("| "): line for line in report.splitlines() if line.startswith("| S1-")}
+    assert rows["S1-MODIFY"].endswith("| 1 |") and rows["S1-ACCEPT"].endswith("| 0 |")  # the good run read the budget twice
 
 
 def test_results_are_written_after_every_finished_run(tmp_path, monkeypatch):
