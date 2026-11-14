@@ -255,6 +255,13 @@ def test_demo_mode_runs_end_to_end_with_a_baseline(client, monkeypatch):
     assert r.status_code == 503 and "unknown baseline" in r.json()["detail"]
 
 
+def test_unset_model_is_graceful(client):
+    health = client.get("/api/health").json()
+    assert health["ok"] is True and health["model"] == "" and health["demo"] is False
+    r = client.post("/api/runs", json={"scenario_id": "S1-MODIFY"})
+    assert r.status_code == 503 and "LLM_MODEL" in r.json()["detail"]
+
+
 def test_eval_reports_use_the_contract_shape(client, tmp_path):
     eval_dir = tmp_path / "eval"
     eval_dir.mkdir()

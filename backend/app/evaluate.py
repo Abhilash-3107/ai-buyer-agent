@@ -1,8 +1,9 @@
 """CLI: run scenarios x repeats for a model or a baseline, score every run, write a JSON file and a Markdown report.
 
-    uv run python -m app.evaluate --model qwen2.5:7b --repeats 3
+    uv run python -m app.evaluate --model buyer-qwen3.5-4b --repeats 3
+    uv run python -m app.evaluate --model <openai-model> --repeats 3
     uv run python -m app.evaluate --baseline rubber_stamp
-    uv run python -m app.evaluate --model qwen2.5:7b --scenarios S1-MODIFY,S2-ALT-ALSO-SHORT
+    uv run python -m app.evaluate --model buyer-qwen3.5-4b --scenarios S1-MODIFY,S2-ALT-ALSO-SHORT
     uv run python -m app.evaluate --compare ../docs/eval/*.json
 """
 from __future__ import annotations
@@ -237,6 +238,8 @@ def main(argv: list[str]) -> int:
     else:
         env = LLMConfig.from_env()
         config = replace(env, model=args.model or env.model, temperature=0.0 if env.temperature is None else env.temperature)
+        if not config.model:
+            p.error("no model: pass --model or set LLM_MODEL")
         name, kind, temperature = config.model, "model", config.temperature
         def make_client():
             return LLMClient(config)

@@ -47,6 +47,17 @@ def test_missing_key_for_remote_provider_fails_fast():
         LLMClient(LLMConfig(base_url="https://api.openai.com/v1", api_key="", model="x", temperature=None))
 
 
+def test_missing_model_fails_fast_naming_the_variable():
+    import pytest
+    with pytest.raises(RuntimeError, match="LLM_MODEL"):
+        LLMClient(LLMConfig(base_url="http://localhost:11434/v1", api_key="", model="", temperature=None))
+
+
+def test_model_has_no_hidden_default(monkeypatch):
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    assert LLMConfig.from_env().model == ""
+
+
 def test_non_object_tool_json_is_reported_not_raised():
     client, _ = fake_client(tool_calls=[tc("c1", "get_stock", "[]")])
     r = LLMClient(CFG, client=client).chat([{"role": "user", "content": "hi"}])
@@ -81,6 +92,28 @@ def test_max_tokens_is_sent_on_every_request_and_defaults_to_4096():
     cfg = LLMConfig(base_url=CFG.base_url, api_key="", model="fake", temperature=None, max_tokens=512)
     LLMClient(cfg, client=client).chat([{"role": "user", "content": "hi"}], tools=[{"type": "function"}])
     assert sent["max_tokens"] == 512
+
+
+def test_hosted_endpoint_sends_max_completion_tokens_instead_of_max_tokens():
+    client, sent = fake_client(content="hi")
+    cfg = LLMConfig(base_url="https://api.openai.com/v1", api_key="sk-test", model="fake", temperature=None, max_tokens=512)
+    LLMClient(cfg, client=client).chat([{"role": "user", "content": "hi"}])
+    assert sent["max_completion_tokens"] == 512
+    assert "max_tokens" not in sent
+
+
+def test_reasoning_effort_is_sent_only_when_set(monkeypatch):
+    client, sent = fake_client(content="hi")
+    LLMClient(CFG, client=client).chat([{"role": "user", "content": "hi"}])
+    assert "reasoning_effort" not in sent
+    monkeypatch.setenv("LLM_MODEL", "fake")  # hermetic: do not depend on the developer's .env
+    monkeypatch.setenv("LLM_BASE_URL", "http://localhost:11434/v1")
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "none")
+    cfg = LLMConfig.from_env()
+    assert cfg.reasoning_effort == "none"
+    client, sent = fake_client(content="hi")
+    LLMClient(cfg, client=client).chat([{"role": "user", "content": "hi"}], tools=[{"type": "function"}])
+    assert sent["reasoning_effort"] == "none"
 
 
 def test_max_tokens_is_read_from_env(monkeypatch):

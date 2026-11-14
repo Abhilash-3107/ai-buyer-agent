@@ -6,8 +6,9 @@ import { BrandMark, CloseIcon, MenuIcon } from "./Icons";
 export function ModelBadge({ health, down }: { health: Health | null; down: boolean }) {
   if (down) return <span className="badge neg">API offline</span>;
   if (!health) return <span className="badge">Checking model</span>;
+  if (!health.model) return <span className="badge warn" title="Set LLM_MODEL, or start the server in demo mode">No model set</span>;
   if (health.demo) return <span className="badge warn" title="Runs use a fixed baseline policy, not the agent's model">{demoLabel(health.model)}</span>;
-  return <span className="badge" title={health.local ? "Runs on this machine" : "Runs on a hosted model"}>{health.model}, {health.local ? "local" : "hosted"}</span>;
+  return <span className="badge">{health.model}</span>;
 }
 
 interface SidebarProps {

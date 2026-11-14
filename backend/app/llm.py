@@ -60,6 +60,7 @@ class LLMConfig:
     timeout_s: float = 120.0
     max_retries: int = 2
     max_tokens: int = 4096
+    reasoning_effort: str | None = None  # e.g. "none"; sent only when set
 
     @classmethod
     def from_env(cls) -> LLMConfig:
@@ -85,10 +86,11 @@ class LLMConfig:
         return cls(
             base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
             api_key=os.getenv("LLM_API_KEY", ""),
-            model=os.getenv("LLM_MODEL", "gpt-4.1-mini"),
+            model=os.getenv("LLM_MODEL", ""),  # no default: the caller must name the model
             temperature=temperature,
             timeout_s=timeout_s,
             max_tokens=max_tokens,
+            reasoning_effort=os.getenv("LLM_REASONING_EFFORT") or None,
         )
 
     @property
@@ -99,6 +101,8 @@ class LLMConfig:
 class LLMClient:
     def __init__(self, config: LLMConfig | None = None, *, client: Any = None):
         self.config = config or LLMConfig.from_env()
+        if not self.config.model:
+            raise RuntimeError("LLM_MODEL is not set. Set it in .env (see .env.example) or pass --model.")
         if not self.config.api_key and not self.config.is_local:
             raise RuntimeError("LLM_API_KEY is not set. Copy .env.example to .env and fill it in.")
         # `client` is injectable so tests can use a fake without network calls.
@@ -110,12 +114,17 @@ class LLMClient:
         )
 
     def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> LLMResponse:
-        kwargs: dict[str, Any] = {"model": self.config.model, "messages": messages, "max_tokens": self.config.max_tokens}
+        # OpenAI's newer models reject `max_tokens` and want `max_completion_tokens`;
+        # Ollama's OpenAI-compatible endpoint only reads `max_tokens`.
+        limit_key = "max_tokens" if self.config.is_local else "max_completion_tokens"
+        kwargs: dict[str, Any] = {"model": self.config.model, "messages": messages, limit_key: self.config.max_tokens}
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
         if self.config.temperature is not None:
             kwargs["temperature"] = self.config.temperature
+        if self.config.reasoning_effort:
+            kwargs["reasoning_effort"] = self.config.reasoning_effort
 
         started = time.perf_counter()
         resp = self._client.chat.completions.create(**kwargs)
