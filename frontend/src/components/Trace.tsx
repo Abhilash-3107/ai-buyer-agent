@@ -60,25 +60,30 @@ function WriteBox({ call, step }: { call: Call; step?: HarnessStep }) {
   return null;
 }
 
+/** One tool call: preloaded reads show their arguments inline, a tool run (the harness's work) shows its result. */
 function CallRow({ call, compact = false }: { call: Call; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const summary = resultSummary(call);
+  const refused = call.steps.some((s) => s.stage === "request" && s.status !== "ACCEPTED");
+  // The steps already say what happened to a refused request, a write and a decision; the box covers the rest.
+  const explained = refused || call.name === "submit_decision" || call.steps.some((s) => s.stage !== "request");
   return (
     <div className={compact ? "py-1.5" : undefined}>
       <button type="button" className="row-btn" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <Chevron open={open} />
-        <span className="call-name">{call.name}</span>
-        {compact && <span className={`call-result ${summary.tone === "neutral" ? "" : summary.tone}`}>{summary.text}</span>}
+        {compact ? <span className="call-name">{call.name}</span> : <span className="gen-name">Tool <span className="call-name">{call.name}</span></span>}
+        <span className={`call-result ${summary.tone === "neutral" ? "" : summary.tone}`}>{summary.text}</span>
       </button>
-      <div className="call-args"><Args args={call.args} /></div>
+      {compact && <div className="call-args"><Args args={call.args} /></div>}
+      {!compact && !explained && <WriteBox call={call} />}
       {open && (
         <div className="json">
           <div>
-            <h4>Arguments</h4>
+            <h4>Input</h4>
             <pre>{JSON.stringify(call.args, null, 2)}</pre>
           </div>
           <div>
-            <h4>Result</h4>
+            <h4>Output</h4>
             <pre>{call.result === undefined ? "Waiting for the result" : JSON.stringify(call.result, null, 2)}</pre>
           </div>
         </div>
@@ -97,19 +102,6 @@ function StepRow({ step, call }: { step: HarnessStep; call: Call }) {
         <span className={`pill ${v.tone === "neutral" ? "" : v.tone}`}>{v.text}</span>
       </div>
       {violations ? <WriteBox call={call} step={step} /> : step.detail && <p className="step-detail">{step.detail}</p>}
-    </>
-  );
-}
-
-function ExecRow({ call }: { call: Call }) {
-  const summary = resultSummary(call);
-  return (
-    <>
-      <div className="step-line">
-        <span className="step-label">Ran <span className="call-name">{call.name}</span></span>
-        <span className={`call-result ${summary.tone === "neutral" ? "" : summary.tone}`}>{summary.text}</span>
-      </div>
-      <WriteBox call={call} />
     </>
   );
 }
@@ -261,6 +253,9 @@ function Generation({ gen, use, finished }: { gen: Gen; use: ToolUse; finished: 
       </button>
       {sub && <div className="call-args">{sub}</div>}
       {!open && gen.text && <p className="gen-text">{gen.text}</p>}
+      {!open && gen.toolCalls.map((c) => (
+        <div key={c.id} className="call-args requested"><span className="call-name">{c.name}</span> <Args args={c.arguments} /></div>
+      ))}
       {open && (
         <div className="gen-detail">
           <div className="subtabs" role="tablist">
@@ -306,12 +301,10 @@ function Body({ item }: { item: Item }) {
       return <Preload calls={item.calls} />;
     case "generation":
       return <Generation gen={item.gen} use={item.use} finished={item.finished} />;
-    case "call":
+    case "tool":
       return <CallRow call={item.call} />;
     case "step":
       return <StepRow step={item.step} call={item.call} />;
-    case "exec":
-      return <ExecRow call={item.call} />;
     case "verification":
       return (
         <div className={`notice ${item.passed ? "pos" : "neg"}`}>

@@ -153,18 +153,28 @@ class ToolSession:
         except KeyError:
             raise ToolError(f"Unknown SKU {sku!r}: {self.run.node_id} does not stock it") from None
 
-    def call(self, name: str, args: dict, by: str = "agent") -> dict:
-        """Run one tool. Never raises on bad model input."""
+    def check(self, name: str, args: dict) -> tuple[Tool, BaseModel] | str:
+        """The request check: the tool and its parsed arguments, or the error to send back."""
         tool = TOOLS.get(name)
         if tool is None:
-            result = {"ok": False, "error": f"Unknown tool {name!r}. Available tools: {', '.join(TOOLS)}"}
+            return f"Unknown tool {name!r}. Available tools: {', '.join(TOOLS)}"
+        try:
+            return tool, tool.args.model_validate(args)
+        except ValidationError as e:
+            return f"Invalid arguments for {name}: {_readable(e)}"
+
+    def call(self, name: str, args: dict, by: str = "agent", checked: tuple[Tool, BaseModel] | str | None = None) -> dict:
+        """Run one tool. Never raises on bad model input. `checked` is a `check` result the caller already has."""
+        checked = self.check(name, args) if checked is None else checked
+        if isinstance(checked, str):
+            result = {"ok": False, "error": checked}
         else:
+            tool, parsed = checked
             try:
-                result = _json_safe(tool.fn(self, tool.args.model_validate(args)))
-            except ValidationError as e:
-                result = {"ok": False, "error": f"Invalid arguments for {name}: {_readable(e)}"}
+                result = _json_safe(tool.fn(self, parsed))
             except ToolError as e:
                 result = {"ok": False, "error": str(e)}
+        tool = TOOLS.get(name)
         self.calls.append(ToolCallRecord(name, args, result, tool.category if tool else None, result["ok"], by))
         return result
 

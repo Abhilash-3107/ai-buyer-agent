@@ -35,6 +35,7 @@ from .tools import TOOLS, ToolCallRecord, ToolSession
 from .trace import Trace, TraceEvent
 from .verifier import VerificationResult, verify
 
+REQUEST_OK = "Known tool, arguments valid"
 RETRY_LIMIT = 3  # the same failure this many times locks writes
 # Context windows a local server may silently cut the prompt to (see section 10 of the phase plan).
 SUSPICIOUS_INPUT_TOKENS = (2048, 4096, 8192, 16384, 32768, 65536, 131072)
@@ -161,15 +162,24 @@ def run_agent(scenario_id: str, llm: LLMClient, *, max_turns: int = 30,
     failures: Counter = Counter()
     locked = False
 
+    def request_step(call: ToolCall, turn: int, status: str, detail: str) -> None:
+        """The harness's check of the model's request, before anything runs."""
+        trace.emit("harness_step", turn, call_id=call.id, stage="request", status=status, detail=detail)
+
     def run_tool(call: ToolCall, turn: int) -> dict:
         nonlocal locked
         if call.parse_error:
+            request_step(call, turn, "REJECTED", call.parse_error)
             return {"ok": False, "error": call.parse_error}
         tool = TOOLS.get(call.name)
         is_write = tool is not None and tool.kind == "write"
         if is_write and locked and call.name != "escalate_to_human":
+            request_step(call, turn, "LOCKED", WRITES_LOCKED)
             return {"ok": False, "error": WRITES_LOCKED}
-        result = session.call(call.name, call.arguments)
+        checked = session.check(call.name, call.arguments)
+        rejected = isinstance(checked, str)
+        request_step(call, turn, "REJECTED" if rejected else "ACCEPTED", checked if rejected else REQUEST_OK)
+        result = session.call(call.name, call.arguments, checked=checked)
         for step in result.pop("harness_steps", ()):  # traced as harness steps; the model sees the result without them
             trace.emit("harness_step", turn, call_id=call.id, **step)
         key = _failure_key(call.name, result) if is_write else None
@@ -193,7 +203,10 @@ def run_agent(scenario_id: str, llm: LLMClient, *, max_turns: int = 30,
         try:
             args = SubmitDecisionArgs.model_validate(call.arguments)
         except ValidationError as e:
-            return {"ok": False, "error": f"Invalid arguments for submit_decision: {_readable(e)}"}, False
+            error = f"Invalid arguments for submit_decision: {_readable(e)}"
+            request_step(call, turn, "REJECTED", error)
+            return {"ok": False, "error": error}, False
+        request_step(call, turn, "ACCEPTED", REQUEST_OK)
         decision = args
         trace.emit("decision", turn, **args.model_dump())
         verification = verify(conn, run, decision)

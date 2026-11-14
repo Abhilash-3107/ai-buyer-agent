@@ -149,7 +149,7 @@ export interface ToolDef {
 }
 
 export interface HarnessStep {
-  stage: "validator" | "approval" | "supplier" | string;
+  stage: "request" | "validator" | "approval" | "supplier" | string;
   status: string;
   detail: string;
   requested?: number;

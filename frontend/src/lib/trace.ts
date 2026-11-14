@@ -13,6 +13,7 @@ export interface Call {
   args: Record<string, unknown>;
   by: string;
   callId?: string;
+  steps: HarnessStep[]; // what the harness did for this call: its request check, then the write pipeline
   result?: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   ok?: boolean;
 }
@@ -41,16 +42,15 @@ export interface ToolUse {
   preloaded: Set<string>;
 }
 
-/** depth: 0 for the run and each generation, 1 for what the model called, 2 for what the harness did about it. */
-type Base = { key: string; actor: Actor; depth: 0 | 1 | 2 };
+/** depth: 0 for the run, each generation and each tool run, 1 for the harness steps of a tool run. */
+type Base = { key: string; actor: Actor; depth: 0 | 1 };
 export type Item = Base &
   (
     | { kind: "started"; scenarioId: string; sku: string; trigger: Record<string, any> } // eslint-disable-line @typescript-eslint/no-explicit-any
     | { kind: "preload"; calls: Call[] }
     | { kind: "generation"; gen: Generation; use: ToolUse; finished: boolean }
-    | { kind: "call"; call: Call }
+    | { kind: "tool"; call: Call }
     | { kind: "step"; step: HarnessStep; call: Call }
-    | { kind: "exec"; call: Call }
     | { kind: "verification"; passed: boolean; round: number; findings: { code: string; message: string }[] }
     | { kind: "flagged"; message: string; findings: string[] }
     | { kind: "error"; message: string }
@@ -63,12 +63,13 @@ export function buildTimeline(events: TraceEvent[]): Item[] {
   const preload: Call[] = [];
   let preloadAdded = false;
   const pending: Call[] = [];
-  const stepped = new Set<Call>(); // calls whose harness steps already say what happened
   const use: ToolUse = { calls: {}, preloaded: new Set() };
   const generations: Generation[] = [];
   let tools: ToolDef[] = [];
   const finished = events.some((e) => e.type === "run_finished");
-  const h = (key: string, rest: object, depth: 0 | 2 = 0) => items.push({ key, actor: "harness", depth, ...rest } as Item);
+  const h = (key: string, rest: object, depth: 0 | 1 = 0) => items.push({ key, actor: "harness", depth, ...rest } as Item);
+
+  const inTool = () => pending.some((c) => c.by === "agent");
 
   for (const e of events) {
     const d = e.data;
@@ -77,7 +78,7 @@ export function buildTimeline(events: TraceEvent[]): Item[] {
         h(`s${e.seq}`, { kind: "started", scenarioId: d.scenario_id, sku: d.sku, trigger: d.trigger ?? {} });
         break;
       case "tool_call": {
-        const call: Call = { seq: e.seq, name: d.name, args: d.args ?? {}, by: d.by ?? "agent", callId: d.call_id };
+        const call: Call = { seq: e.seq, name: d.name, args: d.args ?? {}, by: d.by ?? "agent", callId: d.call_id, steps: [] };
         pending.push(call);
         if (call.by === "harness") {
           use.preloaded.add(call.name);
@@ -88,15 +89,15 @@ export function buildTimeline(events: TraceEvent[]): Item[] {
           preload.push(call);
         } else {
           use.calls[call.name] = (use.calls[call.name] ?? 0) + 1;
-          items.push({ kind: "call", key: `c${e.seq}`, actor: "llm", depth: 1, call });
+          h(`t${e.seq}`, { kind: "tool", call });
         }
         break;
       }
       case "harness_step": {
         const call = pending.find((c) => c.callId === d.call_id);
         if (!call) break;
-        stepped.add(call);
-        h(`h${e.seq}`, { kind: "step", step: d as HarnessStep, call }, 2);
+        call.steps.push(d as HarnessStep);
+        h(`h${e.seq}`, { kind: "step", step: d as HarnessStep, call }, 1);
         break;
       }
       case "tool_result": {
@@ -105,8 +106,6 @@ export function buildTimeline(events: TraceEvent[]): Item[] {
         if (!call) break;
         call.result = d.result;
         call.ok = d.ok;
-        const sentBack = call.name === "submit_decision" && (call.ok || String(d.result?.error ?? "").startsWith("Verification"));
-        if (call.by !== "harness" && !stepped.has(call) && !sentBack) h(`x${e.seq}`, { kind: "exec", call }, 2);
         break;
       }
       case "llm_request": {
@@ -142,11 +141,12 @@ export function buildTimeline(events: TraceEvent[]): Item[] {
         break;
       case "budget_locked": {
         const parts: string[] = Array.isArray(d.key) ? d.key : [];
-        h(`n${e.seq}`, { kind: "note", text: `Retry limit reached for ${parts.slice(0, 2).join(" ") || "a write"}: further attempts are refused` });
+        h(`n${e.seq}`, { kind: "note", text: `Retry limit reached for ${parts.slice(0, 2).join(" ") || "a write"}: further attempts are refused` }, inTool() ? 1 : 0);
         break;
       }
       case "verification":
-        h(`v${e.seq}`, { kind: "verification", passed: !!d.passed, round: d.round ?? 1, findings: (d.findings ?? []).map((f: any) => ({ code: f.code, message: f.message })) }); // eslint-disable-line @typescript-eslint/no-explicit-any
+        h(`v${e.seq}`, { kind: "verification", passed: !!d.passed, round: d.round ?? 1, findings: (d.findings ?? []).map((f: any) => ({ code: f.code, message: f.message })) }, // eslint-disable-line @typescript-eslint/no-explicit-any
+          inTool() ? 1 : 0); // the one a submit_decision triggers sits under its tool row
         break;
       case "flagged":
         h(`f${e.seq}`, { kind: "flagged", message: d.message, findings: d.findings ?? [] });
@@ -164,11 +164,15 @@ export function buildTimeline(events: TraceEvent[]): Item[] {
   return items;
 }
 
-const STAGES: Record<string, string> = { validator: "Validator", approval: "Approval", supplier: "Supplier" };
+const STAGES: Record<string, string> = { request: "Request", validator: "Validator", approval: "Approval", supplier: "Supplier" };
 
 /** One harness step in words: its stage, a short status and its tone. */
 export function stepView(s: HarnessStep): { label: string; text: string; tone: Tone } {
   const label = STAGES[s.stage] ?? humanize(s.stage);
+  if (s.stage === "request") {
+    const tone: Tone = s.status === "ACCEPTED" ? "pos" : s.status === "REJECTED" ? "neg" : "warn";
+    return { label, text: humanize(s.status), tone };
+  }
   switch (s.status) {
     case "PASSED": return { label, text: "Passed", tone: "pos" };
     case "BLOCKED": return { label, text: "Blocked", tone: "neg" };
@@ -328,6 +332,7 @@ export function resultSummary(call: Call): { text: string; tone: Tone } {
   switch (call.name) {
     case "get_inventory": return { text: `${r.on_hand} on hand`, tone: "neutral" };
     case "get_recommendation": return { text: `Recommends ${r.recommended_qty} units`, tone: "neutral" };
+    case "plan_order": return { text: `Suggests ${r.suggested_qty} units`, tone: "neutral" };
     case "get_purchase_orders": return { text: `${n(r.open_pos)} open`, tone: "neutral" };
     case "get_suppliers": return { text: `${n(r.suppliers)} suppliers`, tone: "neutral" };
     case "get_forecast": return { text: `${n(r.daily_forecast)} days`, tone: "neutral" };

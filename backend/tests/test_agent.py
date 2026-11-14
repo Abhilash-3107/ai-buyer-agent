@@ -55,7 +55,7 @@ def test_trace_records_what_the_model_was_sent_and_which_harness_steps_ran():
     script = [
         reply(call("create_po", {**S1, "qty": 800}, "c1")),
         reply(call("create_po", {**S1, "qty": 192}, "c2")),
-        reply(submit("MODIFY", 192)),
+        reply(call("submit_decision", submit("MODIFY", 192)[1], "c3")),
     ]
     llm = scripted_llm(script)
     events = []
@@ -71,8 +71,10 @@ def test_trace_records_what_the_model_was_sent_and_which_harness_steps_ran():
     assert all(e.data["model"] == "scripted" for e in events if e.type == "llm_response")
 
     steps = [(e.data["call_id"], e.data["stage"], e.data["status"]) for e in events if e.type == "harness_step"]
-    assert steps == [("c1", "validator", "BLOCKED"), ("c2", "validator", "PASSED"),
-                     ("c2", "approval", "AUTO_SUBMITTED"), ("c2", "supplier", "CONFIRMED")]
+    assert steps == [("c1", "request", "ACCEPTED"), ("c1", "validator", "BLOCKED"),
+                     ("c2", "request", "ACCEPTED"), ("c2", "validator", "PASSED"),
+                     ("c2", "approval", "AUTO_SUBMITTED"), ("c2", "supplier", "CONFIRMED"),
+                     ("c3", "request", "ACCEPTED")]
     supplier = next(e.data for e in events if e.type == "harness_step" and e.data["stage"] == "supplier")
     assert (supplier["requested"], supplier["confirmed"]) == (192, 192)
 
@@ -89,6 +91,66 @@ def test_harness_steps_never_reach_the_model_or_the_traced_result():
     assert "harness_steps" not in results(events, "create_po")[0]
     assert [k for k in json.loads(tool_message["content"])] == [
         "ok", "status", "po_id", "escalation_id", "message", "violations", "shortfall", "supplier"]
+
+
+def request_steps(events):
+    return [(e.data["call_id"], e.data["status"], e.data["detail"]) for e in events
+            if e.type == "harness_step" and e.data["stage"] == "request"]
+
+
+def test_every_agent_call_gets_a_request_step_before_its_write_steps_and_preloads_get_none():
+    result, events = run([reply(call("create_po", {**S1, "qty": 192}, "w1"), call("get_budget", {"sku": "SKU-1002"}, "r1")),
+                          reply(call("submit_decision", submit("MODIFY", 192)[1], "s1"))])
+    assert request_steps(events) == [(c, "ACCEPTED", "Known tool, arguments valid") for c in ("w1", "r1", "s1")]
+    assert [(e.data["call_id"], e.data["stage"]) for e in events if e.type == "harness_step"][:4] == [
+        ("w1", "request"), ("w1", "validator"), ("w1", "approval"), ("w1", "supplier")]
+    assert all(e.data.get("call_id") for e in events if e.type == "harness_step")  # none for the harness's own reads
+    assert result.outcome == "DECIDED"
+
+
+def test_rejected_and_locked_requests_are_traced_and_nothing_runs():
+    blocked = [call("create_po", {**S1, "qty": 800}, f"b{i}") for i in (1, 2, 3)]
+    script = [reply(*blocked),
+              reply(call("buy_everything", {}, "u"), call("get_budget", {}, "i"), call("get_budget", '{"sku": ', "m"),
+                    call("create_po", {**S1, "qty": 192}, "l"), call("submit_decision", {"decision": "MAYBE"}, "s")),
+              reply(submit("INVESTIGATE", 0))]
+    result, events = run(script)
+    steps = {c: (st, d) for c, st, d in request_steps(events)}
+    assert steps["u"][0] == "REJECTED" and steps["u"][1].startswith("Unknown tool 'buy_everything'")
+    assert steps["i"] == ("REJECTED", "Invalid arguments for get_budget: sku: Field required")
+    assert steps["m"][0] == "REJECTED" and steps["m"][1].startswith("Invalid JSON arguments")
+    assert steps["l"][0] == "LOCKED" and "locked" in steps["l"][1]
+    assert steps["s"][0] == "REJECTED" and steps["s"][1].startswith("Invalid arguments for submit_decision")
+    assert [steps[f"b{i}"][0] for i in (1, 2, 3)] == ["ACCEPTED"] * 3
+    rejected = {"u", "i", "m", "l", "s"}
+    assert not [e for e in events if e.type == "harness_step" and e.data["call_id"] in rejected and e.data["stage"] != "request"]
+    assert result.conn.execute("SELECT COUNT(*) FROM purchase_orders WHERE created_by = 'agent'").fetchone()[0] == 0
+    assert [(c.name, c.category, c.ok) for c in result.tool_calls[9:]] == [
+        ("create_po", None, False)] * 3 + [("buy_everything", None, False), ("get_budget", "budget", False)]
+
+
+def test_tool_messages_are_unchanged_by_the_request_check():
+    blocked = [call("create_po", {**S1, "qty": 800}, f"b{i}") for i in (1, 2, 3)]
+    script = [reply(*blocked),
+              reply(call("get_budget", {"sku": "SKU-1002"}, "v"), call("buy_everything", {}, "u"),
+                    call("get_budget", {}, "i"), call("get_budget", '{"sku": ', "m"),
+                    call("create_po", {**S1, "qty": 192}, "l")),
+              reply(submit("INVESTIGATE", 0))]
+    llm = scripted_llm(script)
+    run_agent("S1-MODIFY", llm, in_memory=True)
+    sent = {m["tool_call_id"]: m["content"] for m in llm.sent[2][-5:]}
+    tools = ("get_recommendation, get_product, get_inventory, get_sales_history, get_forecast, get_promotions, "
+             "get_purchase_orders, get_suppliers, get_budget, get_storage, get_supplier_events, plan_order, "
+             "create_po, modify_po, accept_partial_confirmation, cancel_po, escalate_to_human")
+    assert sent == {
+        "v": '{"ok": true, "category": "Snacks", "budget_amount": 5000.0, "spent_to_date": 3200.0, '
+             '"committed_on_open_pos": 300.0, "remaining": 1500.0}',
+        "u": json.dumps({"ok": False, "error": f"Unknown tool 'buy_everything'. Available tools: {tools}"}),
+        "i": '{"ok": false, "error": "Invalid arguments for get_budget: sku: Field required"}',
+        "m": '{"ok": false, "error": "Invalid JSON arguments: Expecting value: line 1 column 9 (char 8)"}',
+        "l": '{"ok": false, "error": "This action has failed 3 times for the same reason. Writes are locked for '
+             'this run. Call escalate_to_human, then submit_decision."}',
+    }
 
 
 def test_s2_alt_short_confirmation_is_fixed_after_verifier_feedback():
