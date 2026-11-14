@@ -30,6 +30,7 @@ from .prompts import (
 )
 from .runs import Run, new_run
 from .scenarios import SCENARIOS
+from .serialize import readable
 from .tools import TOOLS, ToolCallRecord, ToolSession
 from .trace import Trace, TraceEvent
 from .verifier import VerificationResult, verify
@@ -78,10 +79,6 @@ class AgentResult:
     trace_path: Path | None
     conn: sqlite3.Connection  # the run's database, for the caller to inspect
     tool_calls: tuple[ToolCallRecord, ...]  # every tool call the model made
-
-
-def _readable(error: ValidationError) -> str:
-    return "; ".join(f"{'.'.join(map(str, e['loc'])) or 'arguments'}: {e['msg']}" for e in error.errors())
 
 
 def _failure_key(name: str, result: dict) -> tuple | None:
@@ -185,7 +182,7 @@ def run_agent(scenario_id: str, llm: LLMClient, *, max_turns: int = 30,
         try:
             args = SubmitDecisionArgs.model_validate(call.arguments)
         except ValidationError as e:
-            error = f"Invalid arguments for submit_decision: {_readable(e)}"
+            error = f"Invalid arguments for submit_decision: {readable(e)}"
             request_step(call, turn, "REJECTED", error)
             return {"ok": False, "error": error}, False
         request_step(call, turn, "ACCEPTED", REQUEST_OK)

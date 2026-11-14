@@ -8,11 +8,9 @@ The run is bound to one node, so tools take `sku`, never `node_id`.
 from __future__ import annotations
 
 import json
-import math
 import sqlite3
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field, is_dataclass
-from datetime import date
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -20,8 +18,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from . import actions
 from .calculations import check_inventory_consistency, demand_stats, plan_order
 from .context import SkuContext, load_sku_context
-from .db import SIM_TODAY, day
+from .db import SIM_TODAY, day, offset
 from .runs import Run
+from .serialize import json_safe, readable
 
 
 class ToolError(Exception):
@@ -118,27 +117,6 @@ def _day(offset: int) -> dict:
     return {"date": day(offset), "day": offset}
 
 
-def _offset(iso_date: str) -> int:
-    return (date.fromisoformat(iso_date) - SIM_TODAY).days
-
-
-def _json_safe(value: Any) -> Any:
-    """Plain JSON types only. `inf` becomes "infinite"; NaN is left alone so a stray one fails loudly."""
-    if isinstance(value, float):
-        return "infinite" if math.isinf(value) else round(value, 2)
-    if is_dataclass(value) and not isinstance(value, type):
-        return _json_safe(asdict(value))
-    if isinstance(value, dict):
-        return {k: _json_safe(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_json_safe(v) for v in value]
-    return value
-
-
-def _readable(error: ValidationError) -> str:
-    return "; ".join(f"{'.'.join(map(str, e['loc'])) or 'arguments'}: {e['msg']}" for e in error.errors())
-
-
 @dataclass
 class ToolSession:
     """One per run. Records every call for the Phase 4 trace and the Phase 5 scorer."""
@@ -160,7 +138,7 @@ class ToolSession:
         try:
             return tool, tool.args.model_validate(args)
         except ValidationError as e:
-            return f"Invalid arguments for {name}: {_readable(e)}"
+            return f"Invalid arguments for {name}: {readable(e)}"
 
     def call(self, name: str, args: dict, checked: tuple[Tool, BaseModel] | str | None = None) -> dict:
         """Run one tool. Never raises on bad model input. `checked` is a `check` result the caller already has."""
@@ -170,7 +148,7 @@ class ToolSession:
         else:
             tool, parsed = checked
             try:
-                result = _json_safe(tool.fn(self, parsed))
+                result = json_safe(tool.fn(self, parsed))
             except ToolError as e:
                 result = {"ok": False, "error": str(e)}
         tool = TOOLS.get(name)
@@ -289,7 +267,7 @@ def _get_supplier_events(s: ToolSession, a: EventsArgs) -> dict:
     return {"ok": True, "events": [
         {"event_id": r["event_id"], "po_id": r["po_id"], "supplier_id": r["supplier_id"],
          "event_type": r["event_type"], "payload": json.loads(r["payload_json"]),
-         "created": _day(_offset(r["created_at"]))} for r in rows]}
+         "created": _day(offset(r["created_at"]))} for r in rows]}
 
 
 # --- calculator ---------------------------------------------------------------------------------

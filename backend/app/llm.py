@@ -23,10 +23,9 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from dotenv import load_dotenv
 from openai import OpenAI
 
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+from .config import load_env
 
 
 @dataclass
@@ -172,6 +171,7 @@ def tool_result_message(call_id: str, content: Any) -> dict[str, Any]:
 
 if __name__ == "__main__":
     # Smoke test:  uv run python -m app.llm
+    load_env()
     cfg = LLMConfig.from_env()
     print(f"model={cfg.model} base_url={cfg.base_url}")
     stock_tool = {"type": "function", "function": {

@@ -7,11 +7,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .db import DATA_DIR
+from .config import get_settings
 from .scenarios import SCENARIOS
 from .seed import build_scenario_db
-
-RUNS_DIR = DATA_DIR / "runs"
 
 
 @dataclass(frozen=True)
@@ -47,7 +45,7 @@ def _trigger_node(conn: sqlite3.Connection, trigger: dict) -> str:
 def new_run(scenario_id: str, *, in_memory: bool = False) -> tuple[Run, sqlite3.Connection]:
     """Build data/runs/<scenario>__<run_id>.db (or an in-memory DB) and record the run_id in meta."""
     run_id = f"{datetime.now(UTC):%Y%m%dT%H%M%S}-{secrets.token_hex(3)}"
-    path = Path(":memory:") if in_memory else RUNS_DIR / f"{scenario_id}__{run_id}.db"
+    path = Path(":memory:") if in_memory else get_settings().runs_dir / f"{scenario_id}__{run_id}.db"
     conn = build_scenario_db(scenario_id, path)
     conn.execute("INSERT INTO meta VALUES ('run_id', ?)", (run_id,))
     conn.commit()

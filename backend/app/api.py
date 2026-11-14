@@ -19,19 +19,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
-from . import actions, evaluate, runs
+from . import actions, evaluate
 from .agent import run_agent
 from .baselines import BaselineClient, make_client
+from .config import get_settings, load_env
 from .db import connect
 from .llm import LLMClient, LLMConfig
 from .runs import Run
 from .scenarios import SCENARIOS
 from .scoring import score_run
 
-EVAL_DIR = evaluate.DEFAULT_OUT  # tests point this at a temp directory
-FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 RUN_ID = re.compile(r"^\d{8}T\d{6}-[0-9a-f]{6}$")  # also keeps user input out of the glob below
 LIST_LIMIT = 50
+
+load_env()  # this module is the uvicorn entry point, so it reads the repo-root .env before anything else
 
 
 # --- the model behind the runs (make_client comes from baselines; tests patch api.make_client) ------
@@ -79,7 +80,7 @@ def _save_sidecar(live: Live) -> None:
 
 def _from_disk(run_id: str) -> Live | None:
     """A finished run of an earlier server process, rebuilt from its trace file and sidecar."""
-    found = next(iter(runs.RUNS_DIR.glob(f"*__{run_id}.api.json")), None) if RUN_ID.match(run_id) else None
+    found = next(iter(get_settings().runs_dir.glob(f"*__{run_id}.api.json")), None) if RUN_ID.match(run_id) else None
     if found is None:
         return None
     side = json.loads(found.read_text())
@@ -108,7 +109,7 @@ def _start(scenario_id: str, client: LLMClient | BaselineClient) -> Live:
     def on_event(e) -> None:
         if e.type == "run_started":
             d = e.data
-            run = Run(d["run_id"], scenario_id, d["node_id"], d["sku"], runs.RUNS_DIR / f"{scenario_id}__{d['run_id']}.db")
+            run = Run(d["run_id"], scenario_id, d["node_id"], d["sku"], get_settings().runs_dir / f"{scenario_id}__{d['run_id']}.db")
             box["live"] = Live(run, model)
             with _REGISTRY_LOCK:
                 REGISTRY[run.run_id] = box["live"]
@@ -282,7 +283,7 @@ def create_run(body: RunRequest) -> dict:
 
 @app.get("/api/runs")
 def list_runs() -> list[dict]:
-    for side in sorted(runs.RUNS_DIR.glob("*.api.json"), key=lambda p: p.name.split("__")[-1], reverse=True)[:LIST_LIMIT]:
+    for side in sorted(get_settings().runs_dir.glob("*.api.json"), key=lambda p: p.name.split("__")[-1], reverse=True)[:LIST_LIMIT]:
         run_id = side.name.split("__")[-1].removesuffix(".api.json")
         with _REGISTRY_LOCK:
             if run_id not in REGISTRY and (live := _from_disk(run_id)):
@@ -335,7 +336,7 @@ def reject(run_id: str, escalation_id: str, body: Note | None = None) -> dict:
 def eval_reports() -> list[dict]:
     """The committed eval results, summarized by the same code that wrote their Markdown."""
     out = []
-    for f in sorted(EVAL_DIR.glob("*.json")):
+    for f in sorted(get_settings().eval_dir.glob("*.json")):
         try:
             data = json.loads(f.read_text())
             s = evaluate.summarize(data["cards"])
@@ -359,5 +360,5 @@ def serve_frontend(app: FastAPI, dist: Path) -> None:
         return FileResponse(target if target.is_file() and dist.resolve() in target.parents else dist / "index.html")
 
 
-if FRONTEND_DIST.is_dir():
-    serve_frontend(app, FRONTEND_DIST)
+if get_settings().frontend_dist.is_dir():
+    serve_frontend(app, get_settings().frontend_dist)

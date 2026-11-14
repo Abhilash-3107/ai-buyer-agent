@@ -22,12 +22,11 @@ from statistics import fmean
 
 from .agent import run_agent
 from .baselines import BASELINES, BaselineClient
+from .config import get_settings, load_env
 from .llm import LLMClient, LLMConfig
 from .prompts import SYSTEM_PROMPT
 from .scenarios import SCENARIOS
 from .scoring import CHECK_NAMES, ScoreCard, score_run
-
-DEFAULT_OUT = Path(__file__).resolve().parents[2] / "docs" / "eval"
 
 
 def evaluate(name: str, make_client, scenario_ids: list[str], repeats: int, *, log=print,
@@ -210,14 +209,16 @@ def write_eval(out: Path, name: str, kind: str, cards: list[ScoreCard], repeats:
 
 
 def main(argv: list[str]) -> int:
+    load_env()
     p = argparse.ArgumentParser(prog="python -m app.evaluate", description=__doc__.split("\n\n")[0])
     p.add_argument("--model", help="model name; overrides LLM_MODEL (base url and key come from the environment)")
     p.add_argument("--baseline", choices=sorted(BASELINES), help="run a non-LLM baseline instead of a model")
     p.add_argument("--repeats", type=int, default=1)
     p.add_argument("--scenarios", help="comma-separated scenario ids (default: all)")
     p.add_argument("--compare", nargs="+", type=Path, metavar="JSON", help="write one comparison table from saved results")
-    p.add_argument("--out", type=Path, default=DEFAULT_OUT, help="output directory (default: <repo>/docs/eval)")
+    p.add_argument("--out", type=Path, default=None, help="output directory (default: <repo>/docs/eval)")
     args = p.parse_args(argv)
+    args.out = args.out or get_settings().eval_dir
 
     if args.compare:
         evals = [json.loads(f.read_text()) for f in sorted(args.compare)]

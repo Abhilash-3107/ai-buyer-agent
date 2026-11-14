@@ -7,8 +7,8 @@ from app import runs
 from app.scenarios import SCENARIOS
 
 
-def test_two_runs_get_two_files_with_their_own_run_id(tmp_path, monkeypatch):
-    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path)
+def test_two_runs_get_two_files_with_their_own_run_id(tmp_path, use_settings):
+    use_settings(runs_dir=tmp_path)
     (a, conn_a), (b, conn_b) = runs.new_run("S1-MODIFY"), runs.new_run("S1-MODIFY")
     assert a.path != b.path and a.run_id != b.run_id
     assert a.path.parent == tmp_path and a.path.name == f"S1-MODIFY__{a.run_id}.db"
@@ -21,8 +21,8 @@ def test_two_runs_get_two_files_with_their_own_run_id(tmp_path, monkeypatch):
     assert sqlite3.connect(b.path).execute("SELECT on_hand FROM inventory").fetchone()[0] == 220
 
 
-def test_in_memory_run_writes_no_file(tmp_path, monkeypatch):
-    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path)
+def test_in_memory_run_writes_no_file(tmp_path, use_settings):
+    use_settings(runs_dir=tmp_path)
     run, conn = runs.new_run("S1-MODIFY", in_memory=True)
     assert list(tmp_path.iterdir()) == []
     assert conn.execute("SELECT value FROM meta WHERE key = 'run_id'").fetchone()[0] == run.run_id

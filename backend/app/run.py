@@ -8,6 +8,7 @@ import sys
 
 from .agent import run_agent
 from .baselines import BaselineClient, make_client
+from .config import load_env
 from .scenarios import SCENARIOS
 from .trace import TraceEvent
 
@@ -47,6 +48,7 @@ def summary(e: TraceEvent) -> str:
 
 
 def main(argv: list[str]) -> int:
+    load_env()
     if len(argv) != 1 or argv[0] not in SCENARIOS:
         print("usage: uv run python -m app.run <scenario id>\n" + "\n".join(f"  {s}" for s in SCENARIOS))
         return 2

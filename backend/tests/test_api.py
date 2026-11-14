@@ -10,17 +10,18 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from scripted import call, investigate, reply, scripted_llm, submit
 
-from app import actions, api, runs
+from app import actions, api
+from app.config import Settings, get_settings
 from app.scenarios import SCENARIOS
 
+REAL_EVAL_DIR = Settings.from_env().eval_dir  # the committed reports
 S1 = {"sku": "SKU-1002", "supplier_id": "SUP-METRO", "daily_demand": 40, "reason": "r"}
 S4 = {"sku": "SKU-4001", "supplier_id": "SUP-METRO", "daily_demand": 60, "reason": "r", "justification": "j"}
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
-    monkeypatch.setattr(api, "EVAL_DIR", tmp_path / "eval")
+def client(use_settings, monkeypatch):
+    use_settings()
     monkeypatch.setattr(api, "REGISTRY", {})
     monkeypatch.delenv("LLM_MODEL", raising=False)
     return TestClient(api.app)
@@ -169,7 +170,7 @@ def test_concurrent_decisions_have_exactly_one_winner(client, monkeypatch, verbs
         assert sorted(codes.values()) == [200, 409]
         winner = verbs[next(i for i, c in codes.items() if c == 200)]
 
-        db = sqlite3.connect(str(next(runs.RUNS_DIR.glob(f"*{run_id}.db"))))
+        db = sqlite3.connect(str(next(get_settings().runs_dir.glob(f"*{run_id}.db"))))
         logged = [a for (a,) in db.execute("SELECT action FROM audit_log WHERE actor = 'supplier_api' OR action LIKE 'PO_%'")
                   if a != "PO_CREATED"]
         status = db.execute("SELECT status FROM purchase_orders WHERE po_id = ?", (esc["po_id"],)).fetchone()[0]
@@ -227,7 +228,7 @@ def test_a_run_saved_before_phase_9_still_opens(client, monkeypatch):
     use_script(monkeypatch, *S1_SCRIPT)
     run_id = start(client)
     read_events(client, run_id)
-    side = next(api.runs.RUNS_DIR.glob(f"*__{run_id}.api.json"))
+    side = next(get_settings().runs_dir.glob(f"*__{run_id}.api.json"))
     saved = json.loads(side.read_text())
     card = saved["scorecard"]
     card["info_read_by_agent"] = card.pop("info_read")
@@ -265,7 +266,7 @@ def test_unset_model_is_graceful(client):
 def test_eval_reports_use_the_contract_shape(client, tmp_path):
     eval_dir = tmp_path / "eval"
     eval_dir.mkdir()
-    real = api.evaluate.DEFAULT_OUT / "rubber_stamp.json"
+    real = REAL_EVAL_DIR / "rubber_stamp.json"
     shutil.copy(real, eval_dir / "rubber_stamp.json")
     (eval_dir / "README.md").write_text("# not a run")
     (eval_dir / "notes.json").write_text('{"hello": 1}')
@@ -284,7 +285,7 @@ def test_eval_reports_use_the_contract_shape(client, tmp_path):
 def test_eval_reports_load_with_or_without_agent_version(client, tmp_path):
     eval_dir = tmp_path / "eval"
     eval_dir.mkdir()
-    data = json.loads((api.evaluate.DEFAULT_OUT / "rubber_stamp.json").read_text())
+    data = json.loads((REAL_EVAL_DIR / "rubber_stamp.json").read_text())
     data.pop("agent_version", None)
     (eval_dir / "old.json").write_text(json.dumps({**data, "name": "old"}))
     (eval_dir / "new.json").write_text(json.dumps({**data, "name": "new", "agent_version": {"git": None, "prompt_sha": "0" * 12}}))

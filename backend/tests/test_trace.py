@@ -4,7 +4,6 @@ import json
 
 from scripted import call, reply, scripted_llm, submit
 
-from app import runs
 from app.agent import run_agent
 from app.trace import Trace
 
@@ -29,8 +28,8 @@ def test_without_a_path_nothing_is_written(tmp_path, monkeypatch):
     assert len(seen) == 1 and list(tmp_path.iterdir()) == []
 
 
-def test_a_run_writes_its_trace_next_to_its_database(tmp_path, monkeypatch):
-    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path)
+def test_a_run_writes_its_trace_next_to_its_database(tmp_path, use_settings):
+    use_settings(runs_dir=tmp_path)
     seen = []
     result = run_agent("S3-ONE-OFF-SPIKE", scripted_llm([reply(submit("ACCEPT", 0, 30.0))]), on_event=seen.append)
     assert result.trace_path == tmp_path / f"S3-ONE-OFF-SPIKE__{result.run.run_id}.trace.jsonl"
@@ -45,8 +44,8 @@ def test_an_in_memory_run_has_no_trace_file():
     assert result.trace_path is None
 
 
-def test_trace_lines_are_strict_json_even_for_infinite_model_arguments(tmp_path, monkeypatch):
-    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path)
+def test_trace_lines_are_strict_json_even_for_infinite_model_arguments(tmp_path, use_settings):
+    use_settings(runs_dir=tmp_path)
     script = [reply(call("get_budget", '{"sku": "SKU-1002", "a": Infinity, "b": [-Infinity, NaN]}')),
               reply(submit("ACCEPT", 0, 30.0))]
     seen = []

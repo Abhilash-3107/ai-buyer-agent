@@ -12,7 +12,6 @@ from datetime import date, timedelta
 from pathlib import Path
 
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 # Frozen "today" so demand windows, lead times and arrival dates are reproducible.
 SIM_TODAY = date(2026, 11, 11)
@@ -21,6 +20,11 @@ SIM_TODAY = date(2026, 11, 11)
 def day(offset: int) -> str:
     """ISO date `offset` days from simulated today (negative = past)."""
     return (SIM_TODAY + timedelta(days=offset)).isoformat()
+
+
+def offset(iso_date: str) -> int:
+    """Days from simulated today to an ISO date (negative = past); the inverse of `day`."""
+    return (date.fromisoformat(iso_date) - SIM_TODAY).days
 
 
 def connect(path: str | Path) -> sqlite3.Connection:

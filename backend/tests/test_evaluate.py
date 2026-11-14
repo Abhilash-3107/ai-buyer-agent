@@ -7,7 +7,6 @@ import pytest
 from scripted import call, investigate, reply, scripted_llm, submit
 
 from app import evaluate as evaluate_module
-from app import runs
 from app.baselines import BaselineClient
 from app.evaluate import evaluate, main, write_eval
 from app.prompts import SYSTEM_PROMPT
@@ -18,8 +17,8 @@ S1 = {"sku": "SKU-1002", "supplier_id": "SUP-METRO", "daily_demand": 40, "reason
 
 
 @pytest.fixture(autouse=True)
-def runs_in_tmp(tmp_path, monkeypatch):
-    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
+def runs_in_tmp(use_settings):
+    use_settings()
 
 
 def baseline_cards(name):

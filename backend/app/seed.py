@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from .builder import Builder
+from .config import load_env
 from .db import create_empty_db
 from .scenarios import SCENARIOS
 
@@ -31,6 +32,7 @@ def _summary(conn: sqlite3.Connection) -> str:
 
 
 if __name__ == "__main__":
+    load_env()
     if len(sys.argv) < 2:
         for s in SCENARIOS.values():
             print(f"[{s.group}] {s.id:<22} expect {s.expected.decision:<11} {s.title}")

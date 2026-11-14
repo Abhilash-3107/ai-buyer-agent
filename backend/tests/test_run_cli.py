@@ -1,9 +1,9 @@
 """The CLI shares the API's client factory, so demo mode works without an API key."""
-from app import run, runs
+from app import run
 
 
-def test_cli_demo_mode_runs_without_a_key(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
+def test_cli_demo_mode_runs_without_a_key(use_settings, monkeypatch, capsys):
+    use_settings()
     monkeypatch.setenv("LLM_MODEL", "baseline:rubber_stamp")
     monkeypatch.delenv("LLM_API_KEY", raising=False)
     assert run.main(["S1-REJECT"]) == 0
