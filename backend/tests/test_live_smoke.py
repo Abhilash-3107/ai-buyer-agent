@@ -3,10 +3,10 @@ import os
 
 import pytest
 
-from app.agent import run_agent
+from app.agent.llm import LLMClient, LLMConfig
+from app.agent.service import run_agent
 from app.config import load_env
-from app.llm import LLMClient, LLMConfig
-from app.scenarios import SCENARIOS
+from app.scenarios.catalog import SCENARIOS
 
 load_env()
 pytestmark = pytest.mark.skipif(os.getenv("LLM_LIVE") != "1", reason="set LLM_LIVE=1 to call the configured model")

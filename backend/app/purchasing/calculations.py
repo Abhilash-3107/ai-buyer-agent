@@ -7,25 +7,21 @@ from __future__ import annotations
 
 import math
 import statistics
-from dataclasses import dataclass
 
-from .context import SkuContext, SupplierOffer
+from .types import (
+    DataQualityIssue,
+    DemandStats,
+    OrderPlan,
+    Projection,
+    QtyLimits,
+    Requirement,
+    SkuContext,
+    SupplierOffer,
+)
 
 OUTLIER_FACTOR = 2.5  # a day is an outlier if units > this x the 7-day median
 INVENTORY_SUSPECT_RATIO = 0.5  # on_hand below this share of the receipts-implied floor is suspect
 FORECAST_WINDOW_DAYS = 14
-
-
-@dataclass(frozen=True)
-class DemandStats:
-    forecast_daily: float  # mean of the forecast over the next 14 days
-    mean_7d: float
-    median_7d: float
-    mean_28d: float
-    trend_7d: float  # least-squares slope over the last 7 days, units/day per day
-    ratio_vs_forecast: float  # median_7d / forecast_daily (median, so one outlier can't drive it)
-    outlier_days: tuple[tuple[int, int], ...]  # (day_offset, units) where units > 2.5 x median_7d
-    promo_active_days: tuple[int, ...]  # last-7 day offsets covered by a promotion
 
 
 def _mean(values) -> float:
@@ -59,15 +55,6 @@ def demand_stats(ctx: SkuContext) -> DemandStats:
     )
 
 
-@dataclass(frozen=True)
-class Requirement:
-    daily_demand: float
-    coverage_days: int  # lead + review + safety
-    target: float
-    position: int
-    net_need: float
-
-
 def order_up_to(daily_demand: float, lead_time: int, review: int, safety: int,
                 on_hand: int, inbound: int) -> Requirement:
     coverage = lead_time + review + safety
@@ -80,12 +67,6 @@ def round_order_qty(net_need: float, case_pack: int, moq: int) -> int:
     if net_need <= 0:
         return 0
     return math.ceil(max(net_need, moq) / case_pack) * case_pack
-
-
-@dataclass(frozen=True)
-class Projection:
-    stockout_day: int | None  # first day the stock can't meet that day's demand; None if never in horizon
-    end_levels: tuple[float, ...]  # stock at the end of each day 0..horizon-1
 
 
 def project_stock(on_hand: int, daily_demand: float, arrivals: dict[int, int], horizon: int = 28) -> Projection:
@@ -114,17 +95,6 @@ def days_of_cover(units: float, daily_demand: float) -> float:
     return math.inf if daily_demand == 0 else units / daily_demand
 
 
-@dataclass(frozen=True)
-class QtyLimits:
-    """The biggest legal order under each constraint, already floored to a case pack."""
-    budget: int
-    storage: int
-    supplier_capacity: int
-    shelf_life: int | None  # None for non-perishables
-    binding: str  # name of the tightest limit
-    max_qty: int
-
-
 def floor_to_case(units: int, case_pack: int) -> int:
     return max(0, units // case_pack * case_pack)
 
@@ -141,17 +111,6 @@ def qty_limits(ctx: SkuContext, offer: SupplierOffer, daily_demand: float) -> Qt
     return QtyLimits(**limits, binding=binding, max_qty=max_qty)
 
 
-@dataclass(frozen=True)
-class OrderPlan:
-    """One-call summary for the agent's calculator tool."""
-    supplier_id: str
-    requirement: Requirement
-    suggested_qty: int
-    limits: QtyLimits
-    projection_without_order: Projection
-    arrival_day: int  # = offer.lead_time_days
-
-
 def plan_order(ctx: SkuContext, supplier_id: str, daily_demand: float) -> OrderPlan:
     offer = ctx.offer(supplier_id)
     if offer is None:
@@ -166,13 +125,6 @@ def plan_order(ctx: SkuContext, supplier_id: str, daily_demand: float) -> OrderP
         projection_without_order=project_stock(ctx.on_hand, daily_demand, inbound_arrivals(ctx)),
         arrival_day=offer.lead_time_days,
     )
-
-
-@dataclass(frozen=True)
-class DataQualityIssue:
-    code: str
-    message: str
-    details: dict
 
 
 def check_inventory_consistency(ctx: SkuContext) -> list[DataQualityIssue]:

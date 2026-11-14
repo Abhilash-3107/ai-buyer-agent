@@ -1,14 +1,14 @@
 """Unit tests on hand-made numbers (no DB)."""
 import math
 
-from app.calculations import (
+from app.purchasing.calculations import (
     days_of_cover,
     order_up_to,
     project_stock,
     qty_limits,
     round_order_qty,
 )
-from app.context import InboundPO, SkuContext, SupplierOffer
+from app.purchasing.types import InboundPO, SkuContext, SupplierOffer
 
 
 def make_ctx(**over) -> SkuContext:

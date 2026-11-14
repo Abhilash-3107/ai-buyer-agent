@@ -1,83 +1,19 @@
-"""CLI: run scenarios x repeats for a model or a baseline, score every run, write a JSON file and a Markdown report.
-
-    uv run python -m app.evaluate --model buyer-qwen3.5-4b --repeats 3
-    uv run python -m app.evaluate --model <openai-model> --repeats 3
-    uv run python -m app.evaluate --baseline rubber_stamp
-    uv run python -m app.evaluate --model buyer-qwen3.5-4b --scenarios S1-MODIFY,S2-ALT-ALSO-SHORT
-    uv run python -m app.evaluate --compare ../docs/eval/*.json
-"""
+"""Markdown reports and comparison tables for evaluation results, and the files they are written to."""
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import os
 import re
 import subprocess
-import sys
 from collections import Counter
-from dataclasses import asdict, replace
+from dataclasses import asdict
 from pathlib import Path
-from statistics import fmean
 
-from .agent import run_agent
-from .baselines import BASELINES, BaselineClient
-from .config import get_settings, load_env
-from .llm import LLMClient, LLMConfig
-from .prompts import SYSTEM_PROMPT
-from .scenarios import SCENARIOS
-from .scoring import CHECK_NAMES, ScoreCard, score_run
-
-
-def evaluate(name: str, make_client, scenario_ids: list[str], repeats: int, *, log=print,
-             on_card=None) -> list[ScoreCard]:
-    """One fresh client and one fresh run database per run; the connection is closed once the run is scored.
-    `on_card(cards)` is called after every finished run, so a caller can save partial results."""
-    cards = []
-    for scenario_id in scenario_ids:
-        for repeat in range(1, repeats + 1):
-            result = run_agent(scenario_id, make_client())
-            try:
-                card = score_run(SCENARIOS[scenario_id], result, model=name)
-            finally:
-                result.conn.close()
-            cards.append(card)
-            if on_card:
-                on_card(cards)
-            log(f"{scenario_id} repeat {repeat}/{repeats} {card.outcome} {'passed' if card.passed else 'FAILED'} "
-                f"{card.latency_s:.1f}s")
-    return cards
-
-
-# --- summary -------------------------------------------------------------------------------------
-def _by_scenario(cards: list[dict]) -> dict[str, list[dict]]:
-    grouped: dict[str, list[dict]] = {}
-    for c in cards:
-        grouped.setdefault(c["scenario_id"], []).append(c)
-    return grouped
-
-
-def _check(card: dict, name: str) -> dict:
-    return next(c for c in card["checks"] if c["name"] == name)
-
-
-def summarize(cards: list[dict]) -> dict:
-    """Headline numbers from score cards (as dicts, so a saved JSON file summarizes the same way)."""
-    grouped = _by_scenario(cards)
-    rates = {}
-    for name in CHECK_NAMES:
-        checks = [_check(c, name) for c in cards if _check(c, name)["applicable"]]
-        rates[name] = (sum(c["passed"] for c in checks), len(checks))
-    return {
-        "runs": len(cards), "runs_passed": sum(c["passed"] for c in cards),
-        "scenarios": len(grouped), "scenarios_passed": sum(all(c["passed"] for c in g) for g in grouped.values()),
-        "check_rates": rates,
-        "mean_turns": fmean(c["turns"] for c in cards), "mean_tool_calls": fmean(c["tool_calls"] for c in cards),
-        "mean_blocked_writes": fmean(c["blocked_writes"] for c in cards),
-        "mean_tokens_in": fmean(c["tokens_in"] for c in cards), "mean_tokens_out": fmean(c["tokens_out"] for c in cards),
-        "mean_latency_s": fmean(c["latency_s"] for c in cards), "total_latency_s": sum(c["latency_s"] for c in cards),
-        "outcomes": dict(Counter(c["outcome"] for c in cards)),
-    }
+from ..agent.prompts import SYSTEM_PROMPT
+from ..scenarios.catalog import SCENARIOS
+from .service import by_scenario, check_named, summarize
+from .types import CHECK_NAMES, ScoreCard
 
 
 def _pct(passed: int, total: int) -> str:
@@ -116,14 +52,14 @@ def render_report(name: str, cards: list[dict], repeats: int, agent_version: dic
               "Repeat reads counts, per run, the reads that repeated an earlier successful read with the same arguments.", "",
               "| Scenario | Expected | Got | New units (band) | " + " | ".join(CHECK_NAMES) + " | Consistency | Repeat reads |",
               "|---|---|---|---|" + "---|" * len(CHECK_NAMES) + "---|---|"]
-    for scenario_id, group in _by_scenario(cards).items():
+    for scenario_id, group in by_scenario(cards).items():
         exp = SCENARIOS[scenario_id].expected
         decisions = Counter(c["decision"] or "none" for c in group)
         got, k = decisions.most_common(1)[0]
         band = f"{exp.new_buy_qty[0]}-{exp.new_buy_qty[1]}"
         units = ", ".join(str(c["new_buy_units"]) for c in group)
         lines.append(f"| {scenario_id} | {exp.decision} | {got} | {units} ({band}) | "
-                     + " | ".join(_mark([_check(c, n) for c in group]) for n in CHECK_NAMES) + f" | {k}/{len(group)} | "
+                     + " | ".join(_mark([check_named(c, n) for c in group]) for n in CHECK_NAMES) + f" | {k}/{len(group)} | "
                      + ", ".join(str(c.get("repeat_reads", "-")) for c in group) + " |")
 
     lines += ["", "## Why it failed", ""]
@@ -160,20 +96,20 @@ def render_comparison(evals: list[dict]) -> str:
     for scenario_id in SCENARIOS:
         row = []
         for e in evals:
-            group = _by_scenario(e["cards"]).get(scenario_id, [])
+            group = by_scenario(e["cards"]).get(scenario_id, [])
             row.append(f"{sum(c['passed'] for c in group)}/{len(group)}" if group else "-")
         lines.append(f"| {scenario_id} | " + " | ".join(row) + " |")
     return "\n".join(lines + [""])
 
 
-# --- CLI -----------------------------------------------------------------------------------------
-def _slug(name: str) -> str:
+# --- Files ---------------------------------------------------------------------------------------
+def slug(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", name)
 
 
 def _git(*args: str) -> str | None:
     try:
-        done = subprocess.run(["git", *args], cwd=Path(__file__).resolve().parent, capture_output=True, text=True,
+        done = subprocess.run(["git", *args], cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True,
                               timeout=10, check=True)
     except (OSError, subprocess.SubprocessError):
         return None
@@ -202,54 +138,7 @@ def write_eval(out: Path, name: str, kind: str, cards: list[ScoreCard], repeats:
     out.mkdir(parents=True, exist_ok=True)
     for suffix, text in ((".json", json.dumps(data, indent=2, allow_nan=False) + "\n"),
                          (".md", render_report(name, data["cards"], repeats, version))):
-        target = out / f"{_slug(name)}{suffix}"
+        target = out / f"{slug(name)}{suffix}"
         tmp = target.with_name(target.name + ".tmp")
         tmp.write_text(text)
         os.replace(tmp, target)  # atomic: an interrupted run never leaves a half-written file
-
-
-def main(argv: list[str]) -> int:
-    load_env()
-    p = argparse.ArgumentParser(prog="python -m app.evaluate", description=__doc__.split("\n\n")[0])
-    p.add_argument("--model", help="model name; overrides LLM_MODEL (base url and key come from the environment)")
-    p.add_argument("--baseline", choices=sorted(BASELINES), help="run a non-LLM baseline instead of a model")
-    p.add_argument("--repeats", type=int, default=1)
-    p.add_argument("--scenarios", help="comma-separated scenario ids (default: all)")
-    p.add_argument("--compare", nargs="+", type=Path, metavar="JSON", help="write one comparison table from saved results")
-    p.add_argument("--out", type=Path, default=None, help="output directory (default: <repo>/docs/eval)")
-    args = p.parse_args(argv)
-    args.out = args.out or get_settings().eval_dir
-
-    if args.compare:
-        evals = [json.loads(f.read_text()) for f in sorted(args.compare)]
-        args.out.mkdir(parents=True, exist_ok=True)
-        (args.out / "README.md").write_text(render_comparison(evals))
-        print(f"wrote {args.out / 'README.md'}")
-        return 0
-
-    ids = args.scenarios.split(",") if args.scenarios else list(SCENARIOS)
-    unknown = [i for i in ids if i not in SCENARIOS]
-    if unknown or args.repeats < 1:
-        p.error(f"unknown scenario(s) {unknown}" if unknown else "--repeats must be at least 1")
-
-    if args.baseline:
-        name, kind, temperature = args.baseline, "baseline", None
-        def make_client():
-            return BaselineClient(args.baseline)
-    else:
-        env = LLMConfig.from_env()
-        config = replace(env, model=args.model or env.model, temperature=0.0 if env.temperature is None else env.temperature)
-        if not config.model:
-            p.error("no model: pass --model or set LLM_MODEL")
-        name, kind, temperature = config.model, "model", config.temperature
-        def make_client():
-            return LLMClient(config)
-    version = agent_version()  # taken once, when the run starts
-    evaluate(name, make_client, ids, args.repeats, log=lambda m: print(m, flush=True),
-             on_card=lambda done: write_eval(args.out, name, kind, done, args.repeats, temperature, version))
-    print(f"wrote {args.out / _slug(name)}.json and .md")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))

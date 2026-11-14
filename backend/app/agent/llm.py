@@ -21,11 +21,12 @@ import json
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from openai import OpenAI
 
-from .config import load_env
+if TYPE_CHECKING:
+    from ..evaluation.baselines import BaselineClient
 
 
 @dataclass
@@ -169,17 +170,17 @@ def tool_result_message(call_id: str, content: Any) -> dict[str, Any]:
             "content": content if isinstance(content, str) else json.dumps(content, default=str)}
 
 
-if __name__ == "__main__":
-    # Smoke test:  uv run python -m app.llm
-    load_env()
-    cfg = LLMConfig.from_env()
-    print(f"model={cfg.model} base_url={cfg.base_url}")
-    stock_tool = {"type": "function", "function": {
-        "name": "get_stock", "description": "Get on-hand stock for a SKU",
-        "parameters": {"type": "object", "properties": {"sku": {"type": "string"}}, "required": ["sku"]}}}
-    r = LLMClient(cfg).chat([{"role": "user", "content": "How much stock of SKU-1002 do we have? Use the tool."}],
-                            tools=[stock_tool])
-    print(f"latency={r.latency_s:.1f}s finish={r.finish_reason} usage={r.usage}")
-    print("text:", r.text)
-    for c in r.tool_calls:
-        print("tool_call:", c.name, c.arguments, c.parse_error or "")
+def make_client() -> LLMClient | BaselineClient:
+    """One fresh client per run. LLM_MODEL=baseline:<policy> selects demo mode. Tests replace api.make_client."""
+    model = LLMConfig.from_env().model
+    if not model.startswith("baseline:"):
+        return LLMClient()
+    from ..evaluation.baselines import (  # lazy: the normal path never loads the eval code
+        BASELINES,
+        BaselineClient,
+    )
+
+    name = model.removeprefix("baseline:")
+    if name not in BASELINES:
+        raise RuntimeError(f"unknown baseline {name!r}; choose one of {', '.join(sorted(BASELINES))}")
+    return BaselineClient(name)

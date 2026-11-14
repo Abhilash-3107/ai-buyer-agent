@@ -1,16 +1,18 @@
 """CLI: run the agent on one scenario and print the trace, then the decision and the verifier's verdict.
 
-    uv run python -m app.run S1-MODIFY
+    uv run buyer-run S1-MODIFY
+    uv run python -m app.cli.run S1-MODIFY
 """
 from __future__ import annotations
 
 import sys
 
-from .agent import run_agent
-from .baselines import BaselineClient, make_client
-from .config import load_env
-from .scenarios import SCENARIOS
-from .trace import TraceEvent
+from ..agent.llm import make_client
+from ..agent.service import run_agent
+from ..agent.types import TraceEvent
+from ..config import load_env
+from ..evaluation.baselines import BaselineClient
+from ..scenarios.catalog import SCENARIOS
 
 
 def _short(value: object, limit: int = 110) -> str:
@@ -50,7 +52,7 @@ def summary(e: TraceEvent) -> str:
 def main(argv: list[str]) -> int:
     load_env()
     if len(argv) != 1 or argv[0] not in SCENARIOS:
-        print("usage: uv run python -m app.run <scenario id>\n" + "\n".join(f"  {s}" for s in SCENARIOS))
+        print("usage: uv run buyer-run <scenario id>\n" + "\n".join(f"  {s}" for s in SCENARIOS))
         return 2
     client = make_client()
     if isinstance(client, BaselineClient):
@@ -69,5 +71,9 @@ def main(argv: list[str]) -> int:
     return 0
 
 
+def _entry() -> int:
+    return main(sys.argv[1:])
+
+
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(_entry())

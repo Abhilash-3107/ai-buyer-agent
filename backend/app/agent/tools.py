@@ -1,7 +1,7 @@
 """Tool registry: what the agent can look at and do, as plain functions with typed arguments.
 
 Read tools map 1:1 to the info categories (D25), so "did it gather the right info?" is a set comparison.
-Write tools are thin wrappers over actions.py. Bad input comes back as `{"ok": false, "error": ...}`
+Write tools are thin wrappers over purchasing/actions.py. Bad input comes back as `{"ok": false, "error": ...}`
 instead of an exception (D24), so a malformed call is feedback the model can fix.
 The run is bound to one node, so tools take `sku`, never `node_id`.
 """
@@ -11,16 +11,27 @@ import json
 import sqlite3
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from . import actions
-from .calculations import check_inventory_consistency, demand_stats, plan_order
-from .context import SkuContext, load_sku_context
-from .db import SIM_TODAY, day, offset
-from .runs import Run
-from .serialize import json_safe, readable
+from ..db import SIM_TODAY, day, offset
+from ..purchasing import actions
+from ..purchasing.calculations import (
+    check_inventory_consistency,
+    demand_stats,
+    plan_order,
+)
+from ..purchasing.context import load_sku_context
+from ..purchasing.types import (
+    ActionResult,
+    AgentEscalationKind,
+    PoStatus,
+    Run,
+    SkuContext,
+)
+from ..serialize import json_safe, readable
 
 
 class ToolError(Exception):
@@ -30,6 +41,7 @@ class ToolError(Exception):
 MAX_DAILY_DEMAND = 1_000_000  # units/day; far above any real SKU, keeps downstream math finite
 
 
+# --- argument models ----------------------------------------------------------------------------
 class Args(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
@@ -87,10 +99,17 @@ class PORefArgs(Args):
 
 
 class EscalateArgs(Args):
-    kind: actions.AgentEscalationKind
+    kind: AgentEscalationKind
     summary: str = Field(min_length=1)
     details: dict[str, Any] = Field(default_factory=dict)
     po_id: str | None = None
+
+
+# --- records and the Tool type ------------------------------------------------------------------
+class ToolKind(StrEnum):
+    READ = "read"
+    CALC = "calc"
+    WRITE = "write"
 
 
 @dataclass(frozen=True)
@@ -108,15 +127,11 @@ class Tool:
     description: str
     args: type[BaseModel]  # one source for the JSON schema the model sees AND the validation we run (D27)
     category: str | None  # info category from scenarios.INFO_CATEGORIES; None for calc and write tools
-    kind: str  # "read" | "calc" | "write"
+    kind: ToolKind
     fn: Callable[[ToolSession, Any], dict]
 
 
-def _day(offset: int) -> dict:
-    """ISO date plus offset from today, so the model never does date arithmetic."""
-    return {"date": day(offset), "day": offset}
-
-
+# --- ToolSession --------------------------------------------------------------------------------
 @dataclass
 class ToolSession:
     """One per run. Records every call for the Phase 4 trace and the Phase 5 scorer."""
@@ -166,6 +181,11 @@ class ToolSession:
 
 
 # --- read tools ---------------------------------------------------------------------------------
+def _day(offset_days: int) -> dict:
+    """ISO date plus offset from today, so the model never does date arithmetic."""
+    return {"date": day(offset_days), "day": offset_days}
+
+
 def _get_recommendation(s: ToolSession, a: RecArgs) -> dict:
     r = s.conn.execute("SELECT * FROM recommendations WHERE rec_id = ? AND node_id = ?",
                        (a.rec_id, s.run.node_id)).fetchone()
@@ -286,14 +306,14 @@ def _plan_order(s: ToolSession, a: PlanArgs) -> dict:
 
 
 # --- write tools --------------------------------------------------------------------------------
-def _action_dict(r: actions.ActionResult) -> dict:
+def _action_dict(r: ActionResult) -> dict:
     """A supplier REJECTED is ok=false at the top level, so the model cannot read it as success."""
     supplier = shortfall = None
     ok, message = r.ok, r.message
     if r.supplier is not None:
         shortfall = r.supplier.requested - r.supplier.confirmed
         supplier = {**asdict(r.supplier), "shortfall": shortfall}
-        if r.supplier.status == "REJECTED":
+        if r.supplier.status == PoStatus.REJECTED:
             ok, message = False, f"SUPPLIER REJECTED THE PO, nothing will arrive. {r.message}"
     return {"ok": ok, "status": r.status, "po_id": r.po_id, "escalation_id": r.escalation_id, "message": message,
             "violations": [asdict(v) for v in r.violations], "shortfall": shortfall, "supplier": supplier,
@@ -329,43 +349,45 @@ _WRITE_RESULT = ("The result status is one of: BLOCKED (a hard rule was broken; 
                  "this is expected) or WRITTEN. A submitted PO returns the supplier block: status, requested, "
                  "confirmed and shortfall. Only the confirmed quantity will arrive.")
 
+
+# --- the tool list: every tool in the order the model sees them ---------------------------------
 _TOOL_LIST = [
     Tool("get_recommendation", "The replenishment engine's recommendation and the reason it gives. "
-         "The engine is not guaranteed to be right.", RecArgs, None, "read", _get_recommendation),
+         "The engine is not guaranteed to be right.", RecArgs, None, ToolKind.READ, _get_recommendation),
     Tool("get_product", "Product master: zone, case pack, shelf life, review and safety days.",
-         SkuArgs, None, "read", _get_product),
+         SkuArgs, None, ToolKind.READ, _get_product),
     Tool("get_inventory", "On-hand units, when they were last counted, and data-quality issues "
-         "(for example a record that recent receipts contradict).", SkuArgs, "inventory", "read", _get_inventory),
+         "(for example a record that recent receipts contradict).", SkuArgs, "inventory", ToolKind.READ, _get_inventory),
     Tool("get_sales_history", "Daily sales plus demand statistics: 7-day mean and median, trend, outlier days, "
-         "promotion days, and the ratio to forecast.", SalesArgs, "sales_history", "read", _get_sales_history),
+         "promotion days, and the ratio to forecast.", SalesArgs, "sales_history", ToolKind.READ, _get_sales_history),
     Tool("get_forecast", "The upstream daily demand forecast and its mean.",
-         ForecastArgs, "forecast", "read", _get_forecast),
+         ForecastArgs, "forecast", ToolKind.READ, _get_forecast),
     Tool("get_promotions", "Promotions overlapping the last 28 or next 14 days.",
-         SkuArgs, "promotions", "read", _get_promotions),
+         SkuArgs, "promotions", ToolKind.READ, _get_promotions),
     Tool("get_purchase_orders", "Open POs (expected quantity and arrival) and receipts since the last count.",
-         SkuArgs, "open_pos", "read", _get_purchase_orders),
+         SkuArgs, "open_pos", ToolKind.READ, _get_purchase_orders),
     Tool("get_suppliers", "Every supplier offer: cost, MOQ, lead time, listed capacity, approval, on-time and "
          "fill rate. Listed capacity is a catalog figure; only the supplier's confirmation is binding.",
-         SkuArgs, "suppliers", "read", _get_suppliers),
+         SkuArgs, "suppliers", ToolKind.READ, _get_suppliers),
     Tool("get_budget", "Category budget, spent, committed on open POs and remaining.",
-         SkuArgs, "budget", "read", _get_budget),
+         SkuArgs, "budget", ToolKind.READ, _get_budget),
     Tool("get_storage", "Zone capacity, used by other SKUs, this SKU on hand and inbound, and free space.",
-         SkuArgs, "storage", "read", _get_storage),
+         SkuArgs, "storage", ToolKind.READ, _get_storage),
     Tool("get_supplier_events", "Supplier messages, newest first, optionally for one PO or SKU.",
-         EventsArgs, "supplier_events", "read", _get_supplier_events),
+         EventsArgs, "supplier_events", ToolKind.READ, _get_supplier_events),
     Tool("plan_order", "Order-up-to calculator for a supplier and a daily demand you choose: target, position, "
          "net need, suggested quantity, every limit and the binding one, stockout day without the order.",
-         PlanArgs, None, "calc", _plan_order),
+         PlanArgs, None, ToolKind.CALC, _plan_order),
     Tool("create_po", "Create a purchase order. It is validated before anything is written. " + _WRITE_RESULT,
-         CreatePOArgs, None, "write", _create_po),
+         CreatePOArgs, None, ToolKind.WRITE, _create_po),
     Tool("modify_po", "Change the quantity of a PENDING_APPROVAL or SUBMITTED PO. Validated like a new PO. "
-         + _WRITE_RESULT, ModifyPOArgs, None, "write", _modify_po),
+         + _WRITE_RESULT, ModifyPOArgs, None, ToolKind.WRITE, _modify_po),
     Tool("accept_partial_confirmation", "Accept what the supplier can ship on a PARTIALLY_CONFIRMED PO.",
-         PORefArgs, None, "write", _accept_partial),
-    Tool("cancel_po", "Cancel an open PO.", PORefArgs, None, "write", _cancel_po),
+         PORefArgs, None, ToolKind.WRITE, _accept_partial),
+    Tool("cancel_po", "Cancel an open PO.", PORefArgs, None, ToolKind.WRITE, _cancel_po),
     Tool("escalate_to_human", "Ask a human to decide or act. Kinds: INVESTIGATION (the data cannot be trusted or "
          "contradicts itself), BUDGET_INCREASE (the remaining budget is too small for what is needed), "
          "SUPPLIER_ISSUE (no approved supplier can cover the need in time), OTHER. Put the key numbers in the "
-         "summary.", EscalateArgs, None, "write", _escalate),
+         "summary.", EscalateArgs, None, ToolKind.WRITE, _escalate),
 ]
 TOOLS: dict[str, Tool] = {t.name: t for t in _TOOL_LIST}

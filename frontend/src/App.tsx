@@ -124,7 +124,7 @@ function ApiDown({ onRetry }: { onRetry: () => void }) {
       <header className="title-row">
         <div className="title-block">
           <h1>Can't reach the API</h1>
-          <p className="situation">The backend did not answer at /api. Start it from the backend folder with uvicorn app.api:app, then retry.</p>
+          <p className="situation">The backend did not answer at /api. Start it from the backend folder with uvicorn app.main:app, then retry.</p>
         </div>
       </header>
       <div style={{ marginTop: 24 }}>

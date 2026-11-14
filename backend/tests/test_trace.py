@@ -4,8 +4,8 @@ import json
 
 from scripted import call, reply, scripted_llm, submit
 
-from app.agent import run_agent
-from app.trace import Trace
+from app.agent.service import run_agent
+from app.agent.trace import Trace
 
 
 def test_events_are_written_in_order_and_pushed_to_the_callback(tmp_path):

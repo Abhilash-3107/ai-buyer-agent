@@ -8,17 +8,16 @@ from __future__ import annotations
 
 import json
 import re
-import sqlite3
 import time
 from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import ValidationError
 
-from . import actions
+from ..purchasing import actions
+from ..purchasing.types import ActionStatus
+from ..scenarios.catalog import SCENARIOS
+from ..serialize import readable
 from .llm import LLMClient, ToolCall, tool_result_message
 from .prompts import (
     NUDGE,
@@ -28,12 +27,18 @@ from .prompts import (
     findings_message,
     user_message,
 )
-from .runs import Run, new_run
-from .scenarios import SCENARIOS
-from .serialize import readable
-from .tools import TOOLS, ToolCallRecord, ToolSession
-from .trace import Trace, TraceEvent
-from .verifier import VerificationResult, verify
+from .runs import new_run
+from .tools import TOOLS, ToolKind, ToolSession
+from .trace import Trace
+from .types import (
+    SUBMIT_TOOL,
+    AgentResult,
+    RunOutcome,
+    SubmitDecisionArgs,
+    TraceEvent,
+    VerificationResult,
+)
+from .verifier import verify
 
 REQUEST_OK = "Known tool, arguments valid"
 RETRY_LIMIT = 3  # the same failure this many times locks writes
@@ -41,49 +46,9 @@ RETRY_LIMIT = 3  # the same failure this many times locks writes
 SUSPICIOUS_INPUT_TOKENS = (2048, 4096, 8192, 16384, 32768, 65536, 131072)
 
 
-class SubmitDecisionArgs(BaseModel):
-    """The agent's structured final answer; the verifier checks it against the database."""
-    model_config = ConfigDict(extra="forbid")
-    decision: Literal["ACCEPT", "MODIFY", "REJECT", "INVESTIGATE"] = Field(description=(
-        "ACCEPT: what the trigger proposes (a recommended order, a supplier's changed confirmation) or, if it "
-        "proposes nothing, the current plan stands as it is; you carried it out if it needed carrying out. "
-        "MODIFY: you changed purchasing beyond what the trigger proposed: you created, resized or cancelled a PO. "
-        "REJECT: the proposal should not be carried out, and you bought nothing. "
-        "INVESTIGATE: the data cannot support a decision; you escalated it for investigation and bought nothing."))
-    new_units: int = Field(ge=0, description=(
-        "Units that will ARRIVE from POs you created or increased, using the supplier's confirmed quantity, "
-        "not what you asked for. 0 if none."))
-    daily_demand_used: float | None = Field(description="The daily demand assumption behind the decision")
-    key_factors: list[str] = Field(min_length=1, max_length=5, description="Short facts that drove the decision")
-    actions_taken: list[str] = Field(description="PO ids and escalation ids, and what happened to each")
-    confidence: Literal["low", "medium", "high"]
-    summary: str = Field(min_length=1, description="1-3 sentences for the human buyer")
-
-
-SUBMIT_TOOL = {"type": "function", "function": {
-    "name": "submit_decision",
-    "description": "Finish the run with your decision. Call it exactly once, after your actions are done.",
-    "parameters": SubmitDecisionArgs.model_json_schema()}}
-
-
-@dataclass(frozen=True)
-class AgentResult:
-    run: Run
-    outcome: str  # DECIDED | MAX_STEPS | LLM_ERROR | CONTEXT_TRUNCATED
-    decision: SubmitDecisionArgs | None
-    verification: VerificationResult
-    steps: int
-    tokens_in: int
-    tokens_out: int
-    latency_s: float
-    trace_path: Path | None
-    conn: sqlite3.Connection  # the run's database, for the caller to inspect
-    tool_calls: tuple[ToolCallRecord, ...]  # every tool call the model made
-
-
 def _failure_key(name: str, result: dict) -> tuple | None:
     """What makes two failed writes 'the same': tool, status and violation codes (or a supplier shortfall)."""
-    if result.get("status") in ("BLOCKED", "NEEDS_JUSTIFICATION", "NOT_ALLOWED"):
+    if result.get("status") in (ActionStatus.BLOCKED, ActionStatus.NEEDS_JUSTIFICATION, ActionStatus.NOT_ALLOWED):
         return name, result["status"], tuple(sorted(v["code"] for v in result.get("violations", [])))
     if result.get("shortfall"):
         return name, "SHORTFALL", ()
@@ -133,7 +98,7 @@ def run_agent(scenario_id: str, llm: LLMClient, *, max_turns: int = 30,
                 {"role": "user", "content": user_message(conn, scenario, run)}]
     tools = session.openai_tools() + [SUBMIT_TOOL]
 
-    outcome, decision, verification = "MAX_STEPS", None, VerificationResult(True, ())
+    outcome, decision, verification = RunOutcome.MAX_STEPS, None, VerificationResult(True, ())
     steps = tokens_in = tokens_out = nudges = findings_sent = 0
     sent = 0  # messages already recorded in an llm_request event
     previous_input = None  # the last turn's input_tokens: the conversation only grows
@@ -151,7 +116,7 @@ def run_agent(scenario_id: str, llm: LLMClient, *, max_turns: int = 30,
             request_step(call, turn, "REJECTED", call.parse_error)
             return {"ok": False, "error": call.parse_error}
         tool = TOOLS.get(call.name)
-        is_write = tool is not None and tool.kind == "write"
+        is_write = tool is not None and tool.kind == ToolKind.WRITE
         if is_write and locked and call.name != "escalate_to_human":
             request_step(call, turn, "LOCKED", WRITES_LOCKED)
             return {"ok": False, "error": WRITES_LOCKED}
@@ -209,7 +174,7 @@ def run_agent(scenario_id: str, llm: LLMClient, *, max_turns: int = 30,
             resp = llm.chat(messages, tools)
         except Exception as exc:  # noqa: BLE001 - a provider failure must end the run cleanly, not crash the caller
             trace.emit("error", turn, message=f"{type(exc).__name__}: {exc}")
-            outcome = "LLM_ERROR"
+            outcome = RunOutcome.LLM_ERROR
             break
         tokens_in += resp.usage.get("input_tokens", 0)
         tokens_out += resp.usage.get("output_tokens", 0)
@@ -225,7 +190,7 @@ def run_agent(scenario_id: str, llm: LLMClient, *, max_turns: int = 30,
             if truncated:
                 trace.emit("error", turn, message=f"the model server cut the prompt to {input_tokens} tokens; "
                                                   "raise its context window (see ollama/Modelfile.*)")
-                outcome = "CONTEXT_TRUNCATED"
+                outcome = RunOutcome.CONTEXT_TRUNCATED
                 break
 
         calls, message = resp.tool_calls, resp.message
@@ -262,10 +227,10 @@ def run_agent(scenario_id: str, llm: LLMClient, *, max_turns: int = 30,
                        call_id=call.id)
             messages.append(tool_result_message(call.id, result))
         if done:
-            outcome = "DECIDED"
+            outcome = RunOutcome.DECIDED
             break
 
-    if outcome != "DECIDED":
+    if outcome != RunOutcome.DECIDED:
         decision = None  # a submission the verifier already rejected must not be re-checked and pass
         verification = verify(conn, run, None)
         emit_verification(steps)

@@ -10,9 +10,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from scripted import call, investigate, reply, scripted_llm, submit
 
-from app import actions, api
+from app.api import registry, routes
+from app.api.app import create_app, serve_frontend
 from app.config import Settings, get_settings
-from app.scenarios import SCENARIOS
+from app.purchasing import supplier
+from app.scenarios.catalog import SCENARIOS
 
 REAL_EVAL_DIR = Settings.from_env().eval_dir  # the committed reports
 S1 = {"sku": "SKU-1002", "supplier_id": "SUP-METRO", "daily_demand": 40, "reason": "r"}
@@ -22,13 +24,13 @@ S4 = {"sku": "SKU-4001", "supplier_id": "SUP-METRO", "daily_demand": 60, "reason
 @pytest.fixture
 def client(use_settings, monkeypatch):
     use_settings()
-    monkeypatch.setattr(api, "REGISTRY", {})
+    monkeypatch.setattr(registry, "REGISTRY", {})
     monkeypatch.delenv("LLM_MODEL", raising=False)
-    return TestClient(api.app)
+    return TestClient(create_app())
 
 
 def use_script(monkeypatch, *script):
-    monkeypatch.setattr(api, "make_client", lambda: scripted_llm(list(script)))
+    monkeypatch.setattr(routes, "make_client", lambda: scripted_llm(list(script)))
 
 
 S1_SCRIPT = [investigate("SKU-1002"),
@@ -154,13 +156,13 @@ def _race(client, run_id, esc_id, verbs):
 
 @pytest.mark.parametrize("verbs", [("approve", "approve"), ("approve", "reject")])
 def test_concurrent_decisions_have_exactly_one_winner(client, monkeypatch, verbs):
-    real_submit = actions.supplier_api.submit
+    real_submit = supplier.submit
 
     def slow_submit(conn, po_id):  # widens the window in which a second request could slip in
         time.sleep(0.05)
         return real_submit(conn, po_id)
 
-    monkeypatch.setattr(actions.supplier_api, "submit", slow_submit)
+    monkeypatch.setattr(supplier, "submit", slow_submit)
     for _ in range(10):
         use_script(monkeypatch, *S4_SCRIPT)
         run_id = start(client, "S4-BUDGET")
@@ -215,10 +217,10 @@ def test_history_survives_a_server_restart(client, monkeypatch):
     events, _ = read_events(client, run_id)
     before = client.get(f"/api/runs/{run_id}").json()
 
-    monkeypatch.setattr(api, "REGISTRY", {})  # a new process knows nothing in memory
+    monkeypatch.setattr(registry, "REGISTRY", {})  # a new process knows nothing in memory
     assert client.get(f"/api/runs/{run_id}").json() == before
     assert read_events(client, run_id) == (events, True)
-    monkeypatch.setattr(api, "REGISTRY", {})
+    monkeypatch.setattr(registry, "REGISTRY", {})
     assert [r["run_id"] for r in client.get("/api/runs").json()] == [run_id]
     esc = pending_escalation(before)
     assert client.post(f"/api/runs/{run_id}/escalations/{esc['escalation_id']}/approve", json={}).status_code == 200
@@ -235,7 +237,7 @@ def test_a_run_saved_before_phase_9_still_opens(client, monkeypatch):
     del card["repeat_reads"]
     side.write_text(json.dumps(saved))
 
-    monkeypatch.setattr(api, "REGISTRY", {})
+    monkeypatch.setattr(registry, "REGISTRY", {})
     s = client.get(f"/api/runs/{run_id}").json()
     assert s["scorecard"]["info_read"] and s["scorecard"]["repeat_reads"] is None
 
@@ -309,7 +311,7 @@ def test_frontend_files_and_spa_fallback(tmp_path):
     (tmp_path / "secret.txt").write_text("nope")
     app = FastAPI()
     app.get("/api/ping")(lambda: {"ok": True})
-    api.serve_frontend(app, dist)
+    serve_frontend(app, dist)
     c = TestClient(app)
 
     assert c.get("/api/ping").json() == {"ok": True}
@@ -317,3 +319,15 @@ def test_frontend_files_and_spa_fallback(tmp_path):
     assert c.get("/assets/a.js").text == "console.log(1)"
     assert c.get("/api/missing").status_code == 404
     assert c.get("/../secret.txt").text == "<html>app</html>"  # never leaves the dist folder
+
+
+def test_create_app_serves_the_frontend_only_when_dist_exists(use_settings, tmp_path):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<html>app</html>")
+    use_settings(frontend_dist=dist)
+    with_ui = TestClient(create_app())
+    assert with_ui.get("/some/route").text == "<html>app</html>" and with_ui.get("/api/health").json()["ok"] is True
+    assert with_ui.get("/api/missing").status_code == 404
+    use_settings(frontend_dist=tmp_path / "absent")
+    assert TestClient(create_app()).get("/some/route").status_code == 404

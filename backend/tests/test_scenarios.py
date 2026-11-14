@@ -1,8 +1,9 @@
 """Phase 1 sanity checks: every scenario builds, and its data matches its story."""
 import pytest
 
-from app.scenarios import INFO_CATEGORIES, SCENARIOS
-from app.seed import build_scenario_db
+from app.scenarios.catalog import SCENARIOS
+from app.scenarios.seed import build_scenario_db
+from app.scenarios.types import INFO_CATEGORIES
 
 
 @pytest.mark.parametrize("sid", list(SCENARIOS))

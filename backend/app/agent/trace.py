@@ -7,23 +7,11 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
 
-from .serialize import strict_json
-
-
-@dataclass(frozen=True)
-class TraceEvent:
-    seq: int
-    turn: int  # 0 = before the first model call
-    type: str  # run_started | llm_request | llm_response | tool_call | tool_result | harness_step | nudge
-    #            | recovered_tool_call | budget_locked | decision | verification | flagged | run_finished | error
-    #            llm_request: the messages added since the previous request (+ the tool list on the first one).
-    #            harness_step: a step the code ran for one agent tool call: its request check (stage "request":
-    #            ACCEPTED, REJECTED or LOCKED), then for a write the validator, approval and supplier.
-    data: dict  # JSON-safe
-    ts: float  # seconds since run start
+from ..serialize import strict_json
+from .types import TraceEvent
 
 
 class Trace:

@@ -4,12 +4,13 @@ from dataclasses import replace
 
 import pytest
 
-from app.calculations import demand_stats
-from app.context import load_sku_context
-from app.runs import new_run
-from app.scenarios import INFO_CATEGORIES, SCENARIOS
-from app.tools import TOOLS, ToolSession
-from app.validator import validate_purchase
+from app.agent.runs import new_run
+from app.agent.tools import TOOLS, ToolSession
+from app.purchasing.calculations import demand_stats
+from app.purchasing.context import load_sku_context
+from app.purchasing.validator import validate_purchase
+from app.scenarios.catalog import SCENARIOS
+from app.scenarios.types import INFO_CATEGORIES
 
 
 def session(sid):

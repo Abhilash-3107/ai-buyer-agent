@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "ai-buyer-agent"
 version = "0.1.0"
@@ -11,12 +15,45 @@ dependencies = [
     "python-dotenv>=1.0",
 ]
 
+[project.scripts]
+buyer-run = "app.cli.run:_entry"
+buyer-seed = "app.cli.seed:main"
+buyer-eval = "app.cli.evaluate:main"
+buyer-llm-smoke = "app.cli.llm_smoke:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
+    "import-linter>=2.16",
     "pytest>=8.3",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["data", ".import_linter_cache"]
+
+[tool.importlinter]
+root_package = "app"
+exclude_type_checking_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Import layers (highest first)"
+type = "layers"
+layers = [
+    "app.main",
+    "app.api | app.cli",
+    "app.evaluation",
+    "app.agent",
+    "app.purchasing",
+    "app.scenarios",
+    "app.config | app.db | app.serialize",
+]
+ignore_imports = [
+    "app.agent.llm -> app.evaluation.baselines",  # lazy import in make_client, only for LLM_MODEL=baseline:...
+]

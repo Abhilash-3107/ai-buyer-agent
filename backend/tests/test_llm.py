@@ -3,7 +3,7 @@ from types import SimpleNamespace as NS
 
 import pytest
 
-from app.llm import LLMClient, LLMConfig
+from app.agent.llm import LLMClient, LLMConfig
 
 CFG = LLMConfig(base_url="http://localhost:11434/v1", api_key="", model="fake", temperature=None)
 

@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from app import actions, supplier_api
-from app.runs import new_run
+from app.agent.runs import new_run
+from app.purchasing import actions, supplier
 
 M, N = "SUP-METRO", "DS-NORTH"
 
@@ -23,10 +23,11 @@ def codes(result):
 
 
 def test_only_the_supplier_api_reads_live_availability():
-    app_dir = Path(actions.__file__).parent
-    # builder.py seeds the table; schema.sql defines it. Neither is application logic.
-    offenders = [p.name for p in app_dir.glob("*.py")
-                 if "supplier_live_availability" in p.read_text() and p.name not in ("supplier_api.py", "builder.py")]
+    app_dir = Path(actions.__file__).parents[1]
+    # scenarios/builder.py seeds the table; schema.sql defines it. Neither is application logic.
+    allowed = {"purchasing/supplier.py", "scenarios/builder.py"}
+    offenders = [p.name for p in app_dir.rglob("*.py")
+                 if "supplier_live_availability" in p.read_text() and p.relative_to(app_dir).as_posix() not in allowed]
     assert offenders == []
 
 
@@ -266,7 +267,7 @@ def test_an_exception_rolls_the_whole_write_back(monkeypatch):
     def boom(conn, po_id):
         raise RuntimeError("supplier down")
 
-    monkeypatch.setattr(supplier_api, "submit", boom)
+    monkeypatch.setattr(supplier, "submit", boom)
     pos, audits = scalar(conn, "SELECT COUNT(*) FROM purchase_orders"), scalar(conn, "SELECT COUNT(*) FROM audit_log")
     r = actions.create_po(conn, run, "SKU-1002", M, 192, 40, "r")
     assert (r.ok, r.status) == (False, "NOT_ALLOWED") and "supplier down" in r.message

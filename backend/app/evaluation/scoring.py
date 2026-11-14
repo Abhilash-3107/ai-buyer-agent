@@ -6,46 +6,17 @@ it reads only the run database, the tool call records and the AgentResult.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 
-from .agent import AgentResult
-from .context import load_sku_context
-from .scenarios import Scenario
-from .tools import TOOLS, ToolCallRecord
-from .validator import validate_purchase
-from .verifier import escalated, new_units, recorded_demand, touched_pos
+from ..agent.tools import TOOLS, ToolCallRecord, ToolKind
+from ..agent.types import AgentResult, RunOutcome
+from ..agent.verifier import escalated, new_units, recorded_demand, touched_pos
+from ..purchasing.context import load_sku_context
+from ..purchasing.types import ActionStatus, Severity
+from ..purchasing.validator import validate_purchase
+from ..scenarios.types import Scenario
+from .types import Check, ScoreCard
 
-CHECK_NAMES = ("decision", "information", "constraints", "action", "validation", "recovery")
-REFUSED = ("BLOCKED", "NEEDS_JUSTIFICATION")  # write statuses that mean "the first action did not work"
-
-
-@dataclass(frozen=True)
-class Check:
-    name: str  # one of CHECK_NAMES
-    applicable: bool
-    passed: bool
-    reason: str  # human-readable, with the numbers
-
-
-@dataclass(frozen=True)
-class ScoreCard:
-    scenario_id: str
-    run_id: str
-    model: str
-    checks: tuple[Check, ...]
-    passed: bool  # every applicable check passed
-    outcome: str  # DECIDED | MAX_STEPS | LLM_ERROR | CONTEXT_TRUNCATED
-    decision: str | None
-    new_buy_units: int
-    turns: int
-    tool_calls: int  # every call the model made
-    blocked_writes: int
-    tokens_in: int
-    tokens_out: int
-    latency_s: float
-    verifier_findings: tuple[str, ...]
-    info_read: tuple[str, ...]  # every information category the agent read
-    repeat_reads: int  # read calls that repeated an earlier successful read with the same arguments
+REFUSED = (ActionStatus.BLOCKED, ActionStatus.NEEDS_JUSTIFICATION)  # write statuses that mean "the first action did not work"
 
 
 def _band(lo: int, hi: int) -> str:
@@ -72,7 +43,7 @@ def _repeat_reads(calls: tuple[ToolCallRecord, ...]) -> int:
     """Reads the model had already done: same tool, same arguments, after a successful one."""
     seen, repeats = set(), 0
     for r in calls:
-        if r.name not in TOOLS or TOOLS[r.name].kind != "read":
+        if r.name not in TOOLS or TOOLS[r.name].kind != ToolKind.READ:
             continue
         key = (r.name, json.dumps(r.args, sort_keys=True))
         repeats += key in seen
@@ -95,7 +66,7 @@ def _constraints(result: AgentResult) -> Check:
             continue
         validation = validate_purchase(ctx, po["supplier_id"], po["qty_ordered"], demand, replaces_po_id=po["po_id"])
         problems += [f"{po['po_id']}: {v.message}" for v in validation.violations
-                     if v.severity == "error" and v.code != "SUPPLIER_NOT_APPROVED"]  # reported above, demand-free
+                     if v.severity == Severity.ERROR and v.code != "SUPPLIER_NOT_APPROVED"]  # reported above, demand-free
     if problems:
         return Check("constraints", True, False, "; ".join(problems))
     return Check("constraints", True, True, "every PO the agent created or changed passes validation at its recorded demand")
@@ -103,7 +74,7 @@ def _constraints(result: AgentResult) -> Check:
 
 def _action(scenario: Scenario, result: AgentResult, units: int) -> Check:
     exp, problems = scenario.expected, []
-    if result.outcome != "DECIDED":
+    if result.outcome != RunOutcome.DECIDED:
         return Check("action", True, False, f"run did not finish ({result.outcome})")
     lo, hi = exp.new_buy_qty
     if not lo <= units <= hi:
@@ -121,7 +92,7 @@ def _action(scenario: Scenario, result: AgentResult, units: int) -> Check:
 
 
 def _validation(result: AgentResult) -> Check:
-    if result.outcome != "DECIDED":
+    if result.outcome != RunOutcome.DECIDED:
         return Check("validation", True, False, f"the run ended {result.outcome} without submit_decision")
     if not result.verification.passed:
         return Check("validation", True, False, "verifier findings: " + "; ".join(f.code for f in result.verification.findings))
@@ -133,7 +104,7 @@ def _failed(record: ToolCallRecord) -> bool:
 
 
 def _is_write(record: ToolCallRecord) -> bool:
-    return record.name in TOOLS and TOOLS[record.name].kind == "write"
+    return record.name in TOOLS and TOOLS[record.name].kind == ToolKind.WRITE
 
 
 def _recovery(result: AgentResult, action_passed: bool) -> Check:
@@ -143,9 +114,9 @@ def _recovery(result: AgentResult, action_passed: bool) -> Check:
     failures = [i for i, r in enumerate(writes) if _failed(r)]
     if not failures:
         return Check("recovery", False, True, "no write failed, nothing to recover from")
-    abandoned = result.outcome == "DECIDED" and action_passed
+    abandoned = result.outcome == RunOutcome.DECIDED and action_passed
     unrecovered = [] if abandoned else [writes[i] for i in failures if not any(
-        w.ok and not _failed(w) and (w.name == "escalate_to_human" or w.result.get("status") in ("WRITTEN", "PENDING_APPROVAL"))
+        w.ok and not _failed(w) and (w.name == "escalate_to_human" or w.result.get("status") in (ActionStatus.WRITTEN, ActionStatus.PENDING_APPROVAL))
         for w in writes[i + 1:])]
     if unrecovered:
         return Check("recovery", True, False, f"{len(unrecovered)} of {len(failures)} failed writes ("

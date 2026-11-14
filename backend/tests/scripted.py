@@ -3,7 +3,7 @@ import itertools
 import json
 from types import SimpleNamespace as NS
 
-from app.llm import LLMClient, LLMConfig
+from app.agent.llm import LLMClient, LLMConfig
 
 CFG = LLMConfig(base_url="http://localhost:11434/v1", api_key="", model="scripted", temperature=None)
 

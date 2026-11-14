@@ -3,22 +3,13 @@ from __future__ import annotations
 
 import secrets
 import sqlite3
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .config import get_settings
-from .scenarios import SCENARIOS
-from .seed import build_scenario_db
-
-
-@dataclass(frozen=True)
-class Run:
-    run_id: str
-    scenario_id: str
-    node_id: str  # the one node this run may read and write, taken from the trigger
-    sku: str  # the product the trigger is about, taken from the data like the node
-    path: Path
+from ..config import get_settings
+from ..purchasing.types import Run
+from ..scenarios.catalog import SCENARIOS
+from ..scenarios.seed import build_scenario_db
 
 
 def _trigger_ref(conn: sqlite3.Connection, trigger: dict) -> tuple[str, str]:

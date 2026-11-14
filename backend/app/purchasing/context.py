@@ -1,105 +1,21 @@
 """DB -> facts. Loads everything about one node + SKU into one immutable SkuContext.
 
-This is the only module in the domain core that touches SQL. Dates are converted to integer
+This is the purchasing read model: the SQL that feeds the rules. Dates are converted to integer
 offsets from SIM_TODAY here, once, so nothing downstream deals with dates.
 """
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass, replace
 
-from .db import SIM_TODAY, offset
-
-# Open POs count as inbound stock and consume budget and storage.
-OPEN_PO_STATUSES = ("PENDING_APPROVAL", "SUBMITTED", "CONFIRMED", "PARTIALLY_CONFIRMED")
-
-
-@dataclass(frozen=True)
-class SupplierOffer:
-    supplier_id: str
-    name: str
-    unit_cost: float
-    moq: int
-    lead_time_days: int
-    listed_capacity: int
-    is_primary: bool
-    is_approved: bool
-    on_time_rate: float
-    fill_rate: float
-
-
-@dataclass(frozen=True)
-class InboundPO:
-    po_id: str
-    supplier_id: str
-    status: str
-    qty_ordered: int
-    qty_confirmed: int | None
-    unit_cost: float
-    arrival_day: int  # offset from today
-
-    @property
-    def expected_qty(self) -> int:
-        """A supplier's confirmation overrides what we asked for."""
-        return self.qty_ordered if self.qty_confirmed is None else self.qty_confirmed
-
-
-@dataclass(frozen=True)
-class Receipt:
-    """A RECEIVED PO, kept for the inventory data-quality check."""
-    po_id: str
-    qty: int
-    day: int  # < 0 = in the past
-
-
-@dataclass(frozen=True)
-class Promotion:
-    promo_id: str
-    start_day: int
-    end_day: int
-    description: str
-
-
-@dataclass(frozen=True)
-class SkuContext:
-    node_id: str
-    sku: str
-    name: str
-    category: str
-    zone: str
-    case_pack: int
-    shelf_life_days: int | None
-    review_period_days: int
-    safety_stock_days: int
-    on_hand: int
-    last_counted_day: int
-    sales: tuple[int, ...]  # oldest -> newest, last item = yesterday
-    forecast: tuple[float, ...]  # index 0 = today
-    promotions: tuple[Promotion, ...]
-    inbound: tuple[InboundPO, ...]  # open POs for this node + sku
-    receipts: tuple[Receipt, ...]
-    offers: tuple[SupplierOffer, ...]  # every supplier that sells this SKU, approved or not
-    budget_remaining: float  # amount - spent - value of all open POs in the category
-    storage_free: int  # zone capacity - other SKUs - on_hand - inbound
-
-    @property
-    def inbound_qty(self) -> int:
-        return sum(po.expected_qty for po in self.inbound)
-
-    def offer(self, supplier_id: str) -> SupplierOffer | None:
-        return next((o for o in self.offers if o.supplier_id == supplier_id), None)
-
-    def without_po(self, po_id: str) -> SkuContext:
-        """Same facts with one open PO removed, so "change PO X to qty Q" can be validated as a fresh PO."""
-        po = next((p for p in self.inbound if p.po_id == po_id), None)
-        if po is None:
-            raise KeyError(f"{po_id} is not an open PO for {self.node_id} / {self.sku}")
-        return replace(
-            self,
-            inbound=tuple(p for p in self.inbound if p.po_id != po_id),
-            budget_remaining=self.budget_remaining + po.expected_qty * po.unit_cost,
-            storage_free=self.storage_free + po.expected_qty,
-        )
+from ..db import SIM_TODAY, offset
+from .types import (
+    OPEN_PO_STATUSES,
+    InboundPO,
+    Promotion,
+    Receipt,
+    SkuContext,
+    SupplierOffer,
+)
 
 
 def load_sku_context(conn: sqlite3.Connection, node_id: str, sku: str) -> SkuContext:

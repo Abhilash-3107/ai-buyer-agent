@@ -1,5 +1,5 @@
 """The CLI shares the API's client factory, so demo mode works without an API key."""
-from app import run
+from app.cli import run
 
 
 def test_cli_demo_mode_runs_without_a_key(use_settings, monkeypatch, capsys):

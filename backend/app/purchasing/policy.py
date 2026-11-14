@@ -1,15 +1,9 @@
 """Authority: a valid PO is either auto-submitted or needs a human. Separate from validity on purpose."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from .types import ApprovalDecision
 
 APPROVAL_THRESHOLD_USD = 2000.0
-
-
-@dataclass(frozen=True)
-class ApprovalDecision:
-    auto_submit: bool
-    reason: str
 
 
 def approval_for(po_value: float) -> ApprovalDecision:

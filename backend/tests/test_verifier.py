@@ -1,8 +1,8 @@
 """Loop 3 on hand-built final states: each finding fires when it should and stays silent on a correct state."""
-from app import actions
-from app.agent import SubmitDecisionArgs
-from app.runs import new_run
-from app.verifier import verify
+from app.agent.runs import new_run
+from app.agent.types import SubmitDecisionArgs
+from app.agent.verifier import verify
+from app.purchasing import actions
 
 M, Q, R = "SUP-METRO", "SUP-QUICK", "SUP-RAPIDO"
 

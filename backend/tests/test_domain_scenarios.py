@@ -1,17 +1,17 @@
 """Builds each scenario DB and checks the hand-worked examples end to end."""
 import pytest
 
-from app.calculations import (
+from app.purchasing.calculations import (
     check_inventory_consistency,
     days_of_cover,
     demand_stats,
     plan_order,
 )
-from app.context import load_sku_context
-from app.policy import approval_for
-from app.scenarios import SCENARIOS
-from app.seed import build_scenario_db
-from app.validator import validate_purchase
+from app.purchasing.context import load_sku_context
+from app.purchasing.policy import approval_for
+from app.purchasing.validator import validate_purchase
+from app.scenarios.catalog import SCENARIOS
+from app.scenarios.seed import build_scenario_db
 
 N = "DS-NORTH"
 

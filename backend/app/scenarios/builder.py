@@ -1,6 +1,6 @@
 """Tiny DSL for writing scenario data readably.
 
-Each scenario in scenarios.py is a function that calls these helpers, e.g.
+Each scenario in scenarios/catalog.py is a function that calls these helpers, e.g.
     b.stock("DS-NORTH", "SKU-1002", on_hand=220)
     b.forecast("DS-NORTH", "SKU-1002", per_day=40)
 so the numbers that drive the story are visible at a glance.
@@ -11,7 +11,7 @@ import json
 import random
 import sqlite3
 
-from .db import SIM_TODAY, day
+from ..db import SIM_TODAY, day
 
 
 def steady(rate: float, days: int, jitter: float = 0.1, seed: int = 0) -> list[int]:

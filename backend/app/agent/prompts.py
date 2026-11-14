@@ -9,9 +9,9 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from .db import SIM_TODAY
-from .runs import Run
-from .scenarios import Scenario
+from ..db import SIM_TODAY
+from ..purchasing.types import Run
+from ..scenarios.types import Scenario
 
 SYSTEM_PROMPT = """\
 You are a purchasing agent for a quick-commerce company. You keep one dark store stocked: enough that it does not run out before the next delivery, but not so much that money, storage space or fresh product is wasted.

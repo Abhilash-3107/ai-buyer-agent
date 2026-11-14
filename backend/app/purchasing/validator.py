@@ -5,8 +5,6 @@ The validator only knows what a real buyer knows: it never sees the supplier's l
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from .calculations import (
     days_of_cover,
     floor_to_case,
@@ -14,35 +12,18 @@ from .calculations import (
     project_stock,
     qty_limits,
 )
-from .context import SkuContext
+from .types import Severity, SkuContext, ValidationResult, Violation
 
 EXCESS_COVER_FACTOR = 2.0  # warn when post-order cover exceeds this x the coverage window
 LOW_RELIABILITY_ON_TIME = 0.80  # warn when a supplier's on-time rate is below this
 
 
-@dataclass(frozen=True)
-class Violation:
-    code: str
-    severity: str  # "error" (blocks) | "warning" (allowed, agent must justify)
-    message: str
-    details: dict
-
-
-@dataclass(frozen=True)
-class ValidationResult:
-    ok: bool  # True if no "error"
-    violations: tuple[Violation, ...]
-    po_value: float
-    post_order_cover_days: float
-    arrival_day: int  # 0 when the supplier has no offer for the SKU
-
-
 def _error(code: str, message: str, **details) -> Violation:
-    return Violation(code, "error", message, details)
+    return Violation(code, Severity.ERROR, message, details)
 
 
 def _warning(code: str, message: str, **details) -> Violation:
-    return Violation(code, "warning", message, details)
+    return Violation(code, Severity.WARNING, message, details)
 
 
 def validate_purchase(ctx: SkuContext, supplier_id: str, qty: int, daily_demand: float,
@@ -116,4 +97,4 @@ def validate_purchase(ctx: SkuContext, supplier_id: str, qty: int, daily_demand:
                             f"{offer.name} delivers on time only {offer.on_time_rate:.0%} of the time",
                             on_time_rate=offer.on_time_rate))
 
-    return ValidationResult(not any(v.severity == "error" for v in out), tuple(out), po_value, post_cover, arrival_day)
+    return ValidationResult(not any(v.severity == Severity.ERROR for v in out), tuple(out), po_value, post_cover, arrival_day)

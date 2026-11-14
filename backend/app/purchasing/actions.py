@@ -9,40 +9,36 @@ from __future__ import annotations
 import functools
 import json
 import sqlite3
-from dataclasses import asdict, dataclass
-from typing import Literal, get_args
+from dataclasses import asdict
 
-from . import supplier_api
-from .context import OPEN_PO_STATUSES, SkuContext, load_sku_context
-from .db import audit, day
+from ..db import audit, day
+from . import supplier
+from .context import load_sku_context
 from .policy import approval_for
-from .runs import Run
-from .supplier_api import SupplierResponse
-from .validator import ValidationResult, Violation, validate_purchase
+from .types import (
+    AGENT_ESCALATION_KINDS,
+    MODIFIABLE_STATUSES,
+    OPEN_PO_STATUSES,
+    ActionResult,
+    ActionStatus,
+    PoStatus,
+    Run,
+    Severity,
+    SkuContext,
+    SupplierResponse,
+    ValidationResult,
+    Violation,
+)
+from .validator import validate_purchase
 
-AgentEscalationKind = Literal["INVESTIGATION", "BUDGET_INCREASE", "SUPPLIER_ISSUE", "OTHER"]
-AGENT_ESCALATION_KINDS = get_args(AgentEscalationKind)
-MODIFIABLE_STATUSES = ("PENDING_APPROVAL", "SUBMITTED")  # D23: never after the supplier has answered
-
-_REFUSAL_AUDIT = {"BLOCKED": "PO_BLOCKED", "NEEDS_JUSTIFICATION": "PO_NEEDS_JUSTIFICATION", "NOT_ALLOWED": "NOT_ALLOWED"}
-
-
-@dataclass(frozen=True)
-class ActionResult:
-    ok: bool
-    status: str  # WRITTEN | BLOCKED | NEEDS_JUSTIFICATION | PENDING_APPROVAL | NOT_ALLOWED
-    po_id: str | None
-    violations: tuple[Violation, ...]
-    supplier: SupplierResponse | None  # what the supplier actually confirmed (loop 2)
-    message: str
-    escalation_id: str | None = None  # set when a human queue entry was opened
-    steps: tuple[dict, ...] = ()  # harness steps that ran: {stage: validator | approval | supplier, status, detail}
+_REFUSAL_AUDIT = {ActionStatus.BLOCKED: "PO_BLOCKED", ActionStatus.NEEDS_JUSTIFICATION: "PO_NEEDS_JUSTIFICATION",
+                  ActionStatus.NOT_ALLOWED: "NOT_ALLOWED"}
 
 
-def _result(status: str, message: str, *, po_id: str | None = None, violations: tuple[Violation, ...] = (),
+def _result(status: ActionStatus, message: str, *, po_id: str | None = None, violations: tuple[Violation, ...] = (),
             supplier: SupplierResponse | None = None, escalation_id: str | None = None,
             steps: tuple[dict, ...] = ()) -> ActionResult:
-    return ActionResult(status in ("WRITTEN", "PENDING_APPROVAL"), status, po_id, violations, supplier, message,
+    return ActionResult(status in (ActionStatus.WRITTEN, ActionStatus.PENDING_APPROVAL), status, po_id, violations, supplier, message,
                         escalation_id, steps)
 
 
@@ -56,11 +52,11 @@ def _atomic(action):
             return result
         except Exception as exc:  # noqa: BLE001 - by design every failure rolls back and returns ok=False
             conn.rollback()
-            return _result("NOT_ALLOWED", f"{action.__name__} failed and was rolled back: {exc}")
+            return _result(ActionStatus.NOT_ALLOWED, f"{action.__name__} failed and was rolled back: {exc}")
     return wrapper
 
 
-def _refuse(conn: sqlite3.Connection, run: Run, status: str, attempt: str, entity_id: str | None, message: str,
+def _refuse(conn: sqlite3.Connection, run: Run, status: ActionStatus, attempt: str, entity_id: str | None, message: str,
             violations: tuple[Violation, ...] = (), actor: str = "agent", steps: tuple[dict, ...] = (),
             **details) -> ActionResult:
     audit(conn, run.run_id, actor, _REFUSAL_AUDIT[status], entity_id,
@@ -111,16 +107,16 @@ def _gate(conn: sqlite3.Connection, run: Run, attempt: str, ctx: SkuContext, sup
     """Steps 1-3: errors block, warnings wait for a justification. A refusal is already audited."""
     validation = validate_purchase(ctx, supplier_id, qty, daily_demand, replaces_po_id=replaces_po_id,
                                    arrival_day=arrival_day)
-    errors = [v for v in validation.violations if v.severity == "error"]
+    errors = [v for v in validation.violations if v.severity == Severity.ERROR]
     if errors:
         message = "Blocked: " + "; ".join(v.message for v in errors)
-        return validation, _refuse(conn, run, "BLOCKED", attempt, entity_id, message, validation.violations,
+        return validation, _refuse(conn, run, ActionStatus.BLOCKED, attempt, entity_id, message, validation.violations,
                                    steps=(_validator_step("BLOCKED", validation.violations),),
                                    supplier_id=supplier_id, qty=qty)
     if validation.violations and not (justification or "").strip():
         message = ("Not written: resend with a justification for these warnings: "
                    + "; ".join(v.message for v in validation.violations))
-        return validation, _refuse(conn, run, "NEEDS_JUSTIFICATION", attempt, entity_id, message,
+        return validation, _refuse(conn, run, ActionStatus.NEEDS_JUSTIFICATION, attempt, entity_id, message,
                                    validation.violations,
                                    steps=(_validator_step("NEEDS_JUSTIFICATION", validation.violations),),
                                    supplier_id=supplier_id, qty=qty)
@@ -146,15 +142,15 @@ def _route(conn: sqlite3.Connection, run: Run, po_id: str, po_value: float, audi
         else:
             escalation_id = _insert_escalation(conn, run, "APPROVAL", po_id, summary, approval)
         audit(conn, run.run_id, "agent", audit_action, po_id, {**details, "outcome": "PENDING_APPROVAL"})
-        return _result("PENDING_APPROVAL", f"{po_id} is held for human approval, the supplier was not contacted: "
+        return _result(ActionStatus.PENDING_APPROVAL, f"{po_id} is held for human approval, the supplier was not contacted: "
                        f"{decision.reason}.", po_id=po_id, escalation_id=escalation_id,
                        steps=(passed, _step("approval", "PENDING_APPROVAL", decision.reason)))
 
     conn.execute("UPDATE purchase_orders SET status = 'SUBMITTED' WHERE po_id = ?", (po_id,))
     _close_approval(conn, po_id, "WITHDRAWN")
     audit(conn, run.run_id, "agent", audit_action, po_id, {**details, "outcome": "SUBMITTED"})
-    response = supplier_api.submit(conn, po_id)
-    return _result("WRITTEN", response.message, po_id=po_id, supplier=response,
+    response = supplier.submit(conn, po_id)
+    return _result(ActionStatus.WRITTEN, response.message, po_id=po_id, supplier=response,
                    steps=(passed, _step("approval", "AUTO_SUBMITTED", decision.reason),
                           _step("supplier", response.status, response.message, requested=response.requested,
                                 confirmed=response.confirmed)))
@@ -166,11 +162,11 @@ def create_po(conn: sqlite3.Connection, run: Run, sku: str, supplier_id: str, qt
     try:
         ctx = load_sku_context(conn, run.node_id, sku)
     except KeyError:
-        return _refuse(conn, run, "NOT_ALLOWED", "create_po", None, f"{run.node_id} does not stock {sku}", sku=sku)
+        return _refuse(conn, run, ActionStatus.NOT_ALLOWED, "create_po", None, f"{run.node_id} does not stock {sku}", sku=sku)
     if parent_po_id is not None:
         parent = _own_po(conn, run, parent_po_id)
         if parent is None or parent["sku"] != sku:
-            return _refuse(conn, run, "NOT_ALLOWED", "create_po", None,
+            return _refuse(conn, run, ActionStatus.NOT_ALLOWED, "create_po", None,
                            f"parent_po_id {parent_po_id} is not a PO for {sku} at {run.node_id}", sku=sku)
 
     validation, refusal = _gate(conn, run, "create_po", ctx, supplier_id, qty, daily_demand, None, justification)
@@ -198,9 +194,9 @@ def modify_po(conn: sqlite3.Connection, run: Run, po_id: str, new_qty: int, dail
               justification: str | None = None) -> ActionResult:
     po = _own_po(conn, run, po_id)
     if po is None:
-        return _refuse(conn, run, "NOT_ALLOWED", "modify_po", po_id, f"{po_id} is not a PO at {run.node_id}")
+        return _refuse(conn, run, ActionStatus.NOT_ALLOWED, "modify_po", po_id, f"{po_id} is not a PO at {run.node_id}")
     if po["status"] not in MODIFIABLE_STATUSES:
-        return _refuse(conn, run, "NOT_ALLOWED", "modify_po", po_id,
+        return _refuse(conn, run, ActionStatus.NOT_ALLOWED, "modify_po", po_id,
                        f"{po_id} is {po['status']}; only {' or '.join(MODIFIABLE_STATUSES)} POs can be modified. "
                        "Add a linked top-up PO or cancel instead.")
 
@@ -226,16 +222,16 @@ def modify_po(conn: sqlite3.Connection, run: Run, po_id: str, new_qty: int, dail
 def accept_partial_confirmation(conn: sqlite3.Connection, run: Run, po_id: str, reason: str) -> ActionResult:
     po = _own_po(conn, run, po_id)
     if po is None:
-        return _refuse(conn, run, "NOT_ALLOWED", "accept_partial_confirmation", po_id,
+        return _refuse(conn, run, ActionStatus.NOT_ALLOWED, "accept_partial_confirmation", po_id,
                        f"{po_id} is not a PO at {run.node_id}")
-    if po["status"] != "PARTIALLY_CONFIRMED":
-        return _refuse(conn, run, "NOT_ALLOWED", "accept_partial_confirmation", po_id,
+    if po["status"] != PoStatus.PARTIALLY_CONFIRMED:
+        return _refuse(conn, run, ActionStatus.NOT_ALLOWED, "accept_partial_confirmation", po_id,
                        f"{po_id} is {po['status']}, not PARTIALLY_CONFIRMED")
     conn.execute("UPDATE purchase_orders SET status = 'CONFIRMED', notes = ? WHERE po_id = ?",
                  (_append_note(po["notes"], f"Accepted partial confirmation: {reason}"), po_id))
     audit(conn, run.run_id, "agent", "PO_PARTIAL_ACCEPTED", po_id,
           {"qty_ordered": po["qty_ordered"], "qty_confirmed": po["qty_confirmed"], "reason": reason})
-    return _result("WRITTEN", f"{po_id} is CONFIRMED at the {po['qty_confirmed']} units the supplier can ship "
+    return _result(ActionStatus.WRITTEN, f"{po_id} is CONFIRMED at the {po['qty_confirmed']} units the supplier can ship "
                    f"(of {po['qty_ordered']} ordered).", po_id=po_id)
 
 
@@ -243,15 +239,15 @@ def accept_partial_confirmation(conn: sqlite3.Connection, run: Run, po_id: str, 
 def cancel_po(conn: sqlite3.Connection, run: Run, po_id: str, reason: str) -> ActionResult:
     po = _own_po(conn, run, po_id)
     if po is None:
-        return _refuse(conn, run, "NOT_ALLOWED", "cancel_po", po_id, f"{po_id} is not a PO at {run.node_id}")
+        return _refuse(conn, run, ActionStatus.NOT_ALLOWED, "cancel_po", po_id, f"{po_id} is not a PO at {run.node_id}")
     if po["status"] not in OPEN_PO_STATUSES:
-        return _refuse(conn, run, "NOT_ALLOWED", "cancel_po", po_id, f"{po_id} is {po['status']}, not an open PO")
-    supplier_api.release(conn, po_id)
+        return _refuse(conn, run, ActionStatus.NOT_ALLOWED, "cancel_po", po_id, f"{po_id} is {po['status']}, not an open PO")
+    supplier.release(conn, po_id)
     _close_approval(conn, po_id, "WITHDRAWN")
     conn.execute("UPDATE purchase_orders SET status = 'CANCELLED', notes = ? WHERE po_id = ?",
                  (_append_note(po["notes"], f"Cancelled: {reason}"), po_id))
     audit(conn, run.run_id, "agent", "PO_CANCELLED", po_id, {"previous_status": po["status"], "reason": reason})
-    return _result("WRITTEN", f"{po_id} is CANCELLED.", po_id=po_id)
+    return _result(ActionStatus.WRITTEN, f"{po_id} is CANCELLED.", po_id=po_id)
 
 
 @_atomic
@@ -259,13 +255,13 @@ def escalate(conn: sqlite3.Connection, run: Run, kind: str, summary: str, detail
              po_id: str | None = None) -> ActionResult:
     """Agent escalations only; APPROVAL entries come from the pipeline, never from the agent."""
     if kind not in AGENT_ESCALATION_KINDS:
-        return _refuse(conn, run, "NOT_ALLOWED", "escalate", None,
+        return _refuse(conn, run, ActionStatus.NOT_ALLOWED, "escalate", None,
                        f"Unknown escalation kind {kind!r}; use one of {', '.join(AGENT_ESCALATION_KINDS)}")
     if po_id is not None and _own_po(conn, run, po_id) is None:
-        return _refuse(conn, run, "NOT_ALLOWED", "escalate", None, f"{po_id} is not a PO at {run.node_id}")
+        return _refuse(conn, run, ActionStatus.NOT_ALLOWED, "escalate", None, f"{po_id} is not a PO at {run.node_id}")
     escalation_id = _insert_escalation(conn, run, kind, po_id, summary, details)
     audit(conn, run.run_id, "agent", "ESCALATED", escalation_id, {"kind": kind, "po_id": po_id, "summary": summary})
-    return _result("WRITTEN", f"Escalation {escalation_id} ({kind}) is open for a human.", po_id=po_id,
+    return _result(ActionStatus.WRITTEN, f"Escalation {escalation_id} ({kind}) is open for a human.", po_id=po_id,
                    escalation_id=escalation_id)
 
 
@@ -274,7 +270,7 @@ def flag_run(conn: sqlite3.Connection, run: Run, summary: str, details: dict) ->
     """Verifier side: the run ended with findings nobody fixed, so a human must look at it."""
     escalation_id = _insert_escalation(conn, run, "VERIFICATION_FAILED", None, summary, details)
     audit(conn, run.run_id, "verifier", "RUN_FLAGGED", escalation_id, {"summary": summary, **details})
-    return _result("WRITTEN", f"Escalation {escalation_id} (VERIFICATION_FAILED) is open for a human.",
+    return _result(ActionStatus.WRITTEN, f"Escalation {escalation_id} (VERIFICATION_FAILED) is open for a human.",
                    escalation_id=escalation_id)
 
 
@@ -291,10 +287,10 @@ def _claim_approval(conn: sqlite3.Connection, run: Run, escalation_id: str, stat
                            "AND status = 'OPEN'", (status, escalation_id)).rowcount
     esc = conn.execute("SELECT po_id FROM escalations WHERE escalation_id = ?", (escalation_id,)).fetchone()
     po = _own_po(conn, run, esc["po_id"]) if claimed and esc else None
-    if po is None or po["status"] != "PENDING_APPROVAL":
+    if po is None or po["status"] != PoStatus.PENDING_APPROVAL:
         if claimed:  # an open approval on a PO that is not pending or not this run's stays open
             conn.execute("UPDATE escalations SET status = 'OPEN' WHERE escalation_id = ?", (escalation_id,))
-        return None, _refuse(conn, run, "NOT_ALLOWED", attempt, None,
+        return None, _refuse(conn, run, ActionStatus.NOT_ALLOWED, attempt, None,
                              f"{escalation_id} is not an open approval for a pending PO", actor="human")
     return po, None
 
@@ -308,8 +304,8 @@ def approve_po(conn: sqlite3.Connection, run: Run, escalation_id: str, note: str
     conn.execute("UPDATE purchase_orders SET status = 'SUBMITTED', notes = ? WHERE po_id = ?",
                  (_append_note(po["notes"], f"Approved: {note}"), po["po_id"]))
     audit(conn, run.run_id, "human", "PO_APPROVED", po["po_id"], {"escalation_id": escalation_id, "note": note})
-    response = supplier_api.submit(conn, po["po_id"])
-    return _result("WRITTEN", f"Approved. {response.message}", po_id=po["po_id"], supplier=response,
+    response = supplier.submit(conn, po["po_id"])
+    return _result(ActionStatus.WRITTEN, f"Approved. {response.message}", po_id=po["po_id"], supplier=response,
                    escalation_id=escalation_id)
 
 
@@ -322,5 +318,5 @@ def reject_po(conn: sqlite3.Connection, run: Run, escalation_id: str, note: str)
     conn.execute("UPDATE purchase_orders SET status = 'CANCELLED', notes = ? WHERE po_id = ?",
                  (_append_note(po["notes"], f"Rejected: {note}"), po["po_id"]))
     audit(conn, run.run_id, "human", "PO_REJECTED", po["po_id"], {"escalation_id": escalation_id, "note": note})
-    return _result("WRITTEN", f"{po['po_id']} is CANCELLED, rejected by a human.", po_id=po["po_id"],
+    return _result(ActionStatus.WRITTEN, f"{po['po_id']} is CANCELLED, rejected by a human.", po_id=po["po_id"],
                    escalation_id=escalation_id)

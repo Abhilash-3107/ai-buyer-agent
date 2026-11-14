@@ -5,11 +5,12 @@ import re
 import pytest
 from scripted import scripted_llm
 
-from app.agent import SubmitDecisionArgs, run_agent
-from app.prompts import SYSTEM_PROMPT
-from app.runs import new_run
-from app.scenarios import SCENARIOS
-from app.tools import TOOLS
+from app.agent.prompts import SYSTEM_PROMPT
+from app.agent.runs import new_run
+from app.agent.service import run_agent
+from app.agent.tools import TOOLS
+from app.agent.types import SubmitDecisionArgs
+from app.scenarios.catalog import SCENARIOS
 
 
 def known_ids() -> set[str]:

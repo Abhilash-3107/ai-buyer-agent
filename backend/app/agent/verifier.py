@@ -7,33 +7,22 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
-from .actions import AGENT_ESCALATION_KINDS
-from .calculations import demand_stats, inbound_arrivals, project_stock
-from .context import OPEN_PO_STATUSES, load_sku_context
-from .runs import Run
-from .validator import validate_purchase
-
-if TYPE_CHECKING:
-    from .agent import SubmitDecisionArgs
+from ..purchasing.calculations import demand_stats, inbound_arrivals, project_stock
+from ..purchasing.context import load_sku_context
+from ..purchasing.types import (
+    AGENT_ESCALATION_KINDS,
+    OPEN_PO_STATUSES,
+    PoStatus,
+    Run,
+    Severity,
+)
+from ..purchasing.validator import validate_purchase
+from ..scenarios.types import Decision
+from .types import Finding, SubmitDecisionArgs, VerificationResult
 
 OPEN = ", ".join(f"'{s}'" for s in OPEN_PO_STATUSES)
 AGENT_KINDS = ", ".join(f"'{k}'" for k in AGENT_ESCALATION_KINDS)
-
-
-@dataclass(frozen=True)
-class Finding:
-    code: str
-    message: str
-    details: dict
-
-
-@dataclass(frozen=True)
-class VerificationResult:
-    passed: bool
-    findings: tuple[Finding, ...]
 
 
 def _open_agent_pos(conn: sqlite3.Connection, run: Run) -> list[sqlite3.Row]:
@@ -100,13 +89,13 @@ def verify(conn: sqlite3.Connection, run: Run, decision: SubmitDecisionArgs | No
             continue
         ctx = load_sku_context(conn, run.node_id, po["sku"])
         errors = [v for v in validate_purchase(ctx, po["supplier_id"], po["qty_ordered"], demand,
-                                               replaces_po_id=po["po_id"]).violations if v.severity == "error"]
+                                               replaces_po_id=po["po_id"]).violations if v.severity == Severity.ERROR]
         if errors:
             findings.append(Finding("PO_INVALID", f"{po['po_id']} no longer passes validation: "
                                     + "; ".join(v.message for v in errors), {"po_id": po["po_id"]}))
 
     for po in touched:
-        if po["status"] != "PARTIALLY_CONFIRMED":
+        if po["status"] != PoStatus.PARTIALLY_CONFIRMED:
             continue
         gap = po["qty_ordered"] - po["qty_confirmed"]
         topped_up = conn.execute(f"SELECT 1 FROM purchase_orders WHERE parent_po_id = ? AND created_by = 'agent' "
@@ -142,11 +131,11 @@ def verify(conn: sqlite3.Connection, run: Run, decision: SubmitDecisionArgs | No
                 f"At {demand:g} units/day the stock runs out on day {stockout}, before the next review "
                 f"(day {horizon}), and no escalation was raised.", {"stockout_day": stockout, "horizon": horizon}))
 
-    if decision.decision in ("REJECT", "INVESTIGATE") and units > 0:
+    if decision.decision in (Decision.REJECT, Decision.INVESTIGATE) and units > 0:
         findings.append(Finding("DECISION_ACTION_MISMATCH",
                                 f"The decision is {decision.decision} but {units} new units were bought.",
                                 {"decision": decision.decision, "units": units}))
-    if decision.decision == "INVESTIGATE" and not escalated(conn, run, kind="INVESTIGATION"):
+    if decision.decision == Decision.INVESTIGATE and not escalated(conn, run, kind="INVESTIGATION"):
         findings.append(Finding("DECISION_ACTION_MISMATCH",
                                 "The decision is INVESTIGATE but no INVESTIGATION escalation was raised.",
                                 {"decision": decision.decision}))

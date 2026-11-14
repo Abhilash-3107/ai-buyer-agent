@@ -3,8 +3,8 @@ import sqlite3
 
 import pytest
 
-from app import runs
-from app.scenarios import SCENARIOS
+from app.agent import runs
+from app.scenarios.catalog import SCENARIOS
 
 
 def test_two_runs_get_two_files_with_their_own_run_id(tmp_path, use_settings):

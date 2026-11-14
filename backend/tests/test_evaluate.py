@@ -6,12 +6,15 @@ import re
 import pytest
 from scripted import call, investigate, reply, scripted_llm, submit
 
-from app import evaluate as evaluate_module
-from app.baselines import BaselineClient
-from app.evaluate import evaluate, main, write_eval
-from app.prompts import SYSTEM_PROMPT
-from app.scenarios import SCENARIOS
-from app.scoring import CHECK_NAMES
+from app.agent.prompts import SYSTEM_PROMPT
+from app.cli import evaluate as cli_module
+from app.cli.evaluate import main
+from app.evaluation import report as report_module
+from app.evaluation.baselines import BaselineClient
+from app.evaluation.report import write_eval
+from app.evaluation.service import evaluate
+from app.evaluation.types import CHECK_NAMES
+from app.scenarios.catalog import SCENARIOS
 
 S1 = {"sku": "SKU-1002", "supplier_id": "SUP-METRO", "daily_demand": 40, "reason": "r"}
 
@@ -74,13 +77,13 @@ def test_report_records_the_agent_version(tmp_path):
 
 
 def test_agent_version_marks_a_dirty_tree_and_survives_missing_git(monkeypatch):
-    answers = {"rev-parse": "abc1234", "status": " M app/agent.py"}
-    monkeypatch.setattr(evaluate_module, "_git", lambda *a: answers[a[0]])
-    assert evaluate_module.agent_version()["git"] == "abc1234-dirty"
+    answers = {"rev-parse": "abc1234", "status": " M app/agent/service.py"}
+    monkeypatch.setattr(report_module, "_git", lambda *a: answers[a[0]])
+    assert report_module.agent_version()["git"] == "abc1234-dirty"
     answers["status"] = ""
-    assert evaluate_module.agent_version()["git"] == "abc1234"
-    monkeypatch.setattr(evaluate_module, "_git", lambda *a: None)
-    assert evaluate_module.agent_version()["git"] is None
+    assert report_module.agent_version()["git"] == "abc1234"
+    monkeypatch.setattr(report_module, "_git", lambda *a: None)
+    assert report_module.agent_version()["git"] is None
 
 
 def test_older_reports_without_agent_version_still_render_and_compare(tmp_path):
@@ -89,7 +92,7 @@ def test_older_reports_without_agent_version_still_render_and_compare(tmp_path):
     data = json.loads((tmp_path / "old.json").read_text())
     del data["agent_version"]
     (tmp_path / "old.json").write_text(json.dumps(data))
-    assert "Agent version" not in evaluate_module.render_report("old", data["cards"], 1)
+    assert "Agent version" not in report_module.render_report("old", data["cards"], 1)
     assert main(["--compare", str(tmp_path / "old.json"), "--out", str(tmp_path)]) == 0
     assert "old" in (tmp_path / "README.md").read_text()
 
@@ -113,13 +116,13 @@ def test_report_counts_repeat_reads(tmp_path):
 
 def test_results_are_written_after_every_finished_run(tmp_path, monkeypatch):
     seen = []
-    real = evaluate_module.write_eval
+    real = report_module.write_eval
 
     def spy(out, *args):
         real(out, *args)
         seen.append(len(json.loads((out / "do_nothing.json").read_text())["cards"]))
         assert (out / "do_nothing.md").exists() and not list(out.glob("*.tmp"))
 
-    monkeypatch.setattr(evaluate_module, "write_eval", spy)
+    monkeypatch.setattr(cli_module, "write_eval", spy)
     assert main(["--baseline", "do_nothing", "--scenarios", "S1-REJECT,S1-MODIFY", "--repeats", "2", "--out", str(tmp_path)]) == 0
     assert seen == [1, 2, 3, 4]

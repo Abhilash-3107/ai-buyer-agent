@@ -64,7 +64,7 @@ export function EvalView({ evalData, scenarios }: { evalData: Async<EvalReport[]
 
       {!loading && data && reports.length === 0 ? (
         <div style={{ marginTop: 24 }}>
-          <Empty left>No eval results yet. Run python -m app.evaluate in the backend folder and the reports appear here.</Empty>
+          <Empty left>No eval results yet. Run buyer-eval in the backend folder and the reports appear here.</Empty>
         </div>
       ) : (
         <>

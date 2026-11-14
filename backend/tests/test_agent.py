@@ -4,7 +4,7 @@ import json
 
 from scripted import call, reply, scripted_llm, submit
 
-from app.agent import run_agent
+from app.agent.service import run_agent
 
 S1 = {"sku": "SKU-1002", "supplier_id": "SUP-METRO", "daily_demand": 40, "reason": "r"}
 S2 = {"sku": "SKU-2003", "daily_demand": 40, "reason": "r"}

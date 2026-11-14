@@ -8,27 +8,18 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from dataclasses import dataclass
 
-from .db import audit, current_run_id, day
+from ..db import audit, current_run_id, day
+from .types import PoStatus, SupplierResponse
 
 ACTOR = "supplier_api"
 EVENT_TYPES = {"CONFIRMED": "CONFIRMATION", "PARTIALLY_CONFIRMED": "PARTIAL_CONFIRMATION", "REJECTED": "REJECTION"}
 
 
-@dataclass(frozen=True)
-class SupplierResponse:
-    po_id: str
-    requested: int
-    confirmed: int
-    status: str  # CONFIRMED | PARTIALLY_CONFIRMED | REJECTED
-    message: str
-
-
 def submit(conn: sqlite3.Connection, po_id: str) -> SupplierResponse:
     """Confirm a SUBMITTED PO against live availability and record the answer on the PO, as an event and in the audit log."""
     po = conn.execute("SELECT * FROM purchase_orders WHERE po_id = ?", (po_id,)).fetchone()
-    if po is None or po["status"] != "SUBMITTED":
+    if po is None or po["status"] != PoStatus.SUBMITTED:
         raise ValueError(f"{po_id} is not a SUBMITTED PO")
 
     row = conn.execute("SELECT available_units FROM supplier_live_availability WHERE supplier_id = ? AND sku = ?",
@@ -36,13 +27,13 @@ def submit(conn: sqlite3.Connection, po_id: str) -> SupplierResponse:
     requested = po["qty_ordered"]
     confirmed = min(requested, row[0] if row else 0)
     if confirmed == requested:
-        status, message = "CONFIRMED", f"Supplier confirmed all {requested} units of {po_id}."
+        status, message = PoStatus.CONFIRMED, f"Supplier confirmed all {requested} units of {po_id}."
     elif confirmed > 0:
-        status = "PARTIALLY_CONFIRMED"
+        status = PoStatus.PARTIALLY_CONFIRMED
         message = (f"Supplier confirmed only {confirmed} of {requested} units of {po_id} "
                    f"(short by {requested - confirmed}).")
     else:
-        status, message = "REJECTED", f"Supplier cannot ship any of the {requested} units of {po_id}."
+        status, message = PoStatus.REJECTED, f"Supplier cannot ship any of the {requested} units of {po_id}."
 
     conn.execute("UPDATE supplier_live_availability SET available_units = available_units - ? "
                  "WHERE supplier_id = ? AND sku = ?", (confirmed, po["supplier_id"], po["sku"]))

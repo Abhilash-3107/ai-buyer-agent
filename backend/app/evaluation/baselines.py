@@ -10,7 +10,7 @@ import json
 import re
 from collections.abc import Callable, Generator
 
-from .llm import LLMClient, LLMConfig, LLMResponse, ToolCall
+from ..agent.llm import LLMResponse, ToolCall
 
 # A policy gets the trigger (type and its ## Trigger JSON) and yields one batch of (tool name, arguments) per model turn.
 # It receives the previous batch's results back from `yield`.
@@ -98,14 +98,3 @@ class BaselineClient:
         message = {"role": "assistant", "content": None, "tool_calls": [
             {"id": c.id, "type": "function", "function": {"name": c.name, "arguments": c.raw_arguments}} for c in calls]}
         return LLMResponse(text=None, tool_calls=calls, finish_reason="tool_calls", message=message, model=self.name)
-
-
-def make_client() -> LLMClient | BaselineClient:
-    """One fresh client per run. LLM_MODEL=baseline:<policy> selects demo mode. Tests replace api.make_client."""
-    model = LLMConfig.from_env().model
-    if not model.startswith("baseline:"):
-        return LLMClient()
-    name = model.removeprefix("baseline:")
-    if name not in BASELINES:
-        raise RuntimeError(f"unknown baseline {name!r}; choose one of {', '.join(sorted(BASELINES))}")
-    return BaselineClient(name)
