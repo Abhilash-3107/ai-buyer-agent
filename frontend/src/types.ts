@@ -74,8 +74,12 @@ export interface Escalation {
   kind: string;
   po_id: string | null;
   summary: string;
+  /** What a person needs to answer it: the verifier's findings, the agent's numbers, the approval rule. */
+  details: Record<string, unknown>;
   status: string;
   created_at: string;
+  /** The note left when it was answered, if any. */
+  answer_note: string | null;
 }
 
 export interface RunSummary {

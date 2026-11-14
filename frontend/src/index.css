@@ -312,6 +312,14 @@ td .sub { display: block; margin-top: 2px; font-size: var(--fs-small); line-heig
 .queue-result { font-size: 13px; line-height: 18px; color: var(--muted); }
 .queue-result.neg { color: var(--negative); }
 .queue-done { color: var(--muted); font-size: 13px; }
+.queue-context { display: grid; gap: 8px; }
+.queue-context .facts { margin: 0; }
+.queue-why { color: var(--muted); font-size: 13px; line-height: 18px; }
+.queue-findings { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.queue-findings li { display: grid; gap: 2px; padding: 8px 10px; border-left: 3px solid var(--negative); background: color-mix(in srgb, var(--negative) 6%, var(--surface)); border-radius: var(--radius-control); }
+.queue-findings .mono { font-size: 12px; color: var(--negative); }
+.queue-buttons { display: flex; gap: 8px; }
+.queue-note { flex: 1 1 200px; min-width: 0; height: var(--control-height); padding: 0 10px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); color: inherit; font: inherit; }
 
 /* ---------- states ---------- */
 .empty { display: grid; place-items: center; gap: 4px; min-height: 64px; padding: 14px 16px; border: 1px dashed var(--control); border-radius: var(--radius-card); color: var(--muted); text-align: center; }

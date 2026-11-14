@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { api, ApiError } from "../api";
+import { api, ApiError, type Verb } from "../api";
 import type { Check, Escalation, PurchaseOrder, RunSummary, Scenario } from "../types";
 import { bandWords } from "../lib/derive";
 import { count, money } from "../lib/format";
-import { checkLabel, decisionWord, escalationKind, humanize, poStatus } from "../lib/words";
+import { checkLabel, decisionWord, escalationAsk, escalationKind, humanize, poStatus } from "../lib/words";
 import { Cross, Tick } from "./Icons";
 import { Empty } from "./States";
 import { WithIds } from "./Text";
@@ -223,23 +223,24 @@ function PoTable({ summary, hasRun, sku }: { summary: RunSummary | null; hasRun:
 /* ---------- waiting for you ---------- */
 
 interface Handled {
-  busy?: "approve" | "reject";
+  busy?: Verb;
   message?: string;
   failed?: boolean;
 }
 
 function Queue({ summary, hasRun, runId, onChanged }: { summary: RunSummary | null; hasRun: boolean; runId: string | null; onChanged: () => void }) {
   const [handled, setHandled] = useState<Record<string, Handled>>({});
+  const [notes, setNotes] = useState<Record<string, string>>({});
   const all = summary?.escalations ?? [];
   const open = all.filter((e) => e.status === "OPEN");
   const closed = all.filter((e) => e.status !== "OPEN");
   const running = hasRun && summary?.status !== "finished";
 
-  const decide = async (e: Escalation, verb: "approve" | "reject") => {
+  const decide = async (e: Escalation, verb: Verb) => {
     if (!runId) return;
     setHandled((h) => ({ ...h, [e.escalation_id]: { busy: verb } }));
     try {
-      const res = await api.decide(runId, e.escalation_id, verb);
+      const res = await api.decide(runId, e.escalation_id, verb, notes[e.escalation_id]?.trim() ?? "");
       setHandled((h) => ({ ...h, [e.escalation_id]: { message: res.message, failed: !res.ok } }));
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Something went wrong.";
@@ -263,24 +264,42 @@ function Queue({ summary, hasRun, runId, onChanged }: { summary: RunSummary | nu
         <div className="queue">
           {open.map((e) => {
             const h = handled[e.escalation_id];
-            const canAct = e.kind === "APPROVAL" && e.po_id && !running;
+            const isApproval = e.kind === "APPROVAL";
+            const canAnswer = hasRun && !running && (!isApproval || !!e.po_id);
+            const ask = escalationAsk(e.kind);
+            const [yes, no]: [Verb, Verb] = isApproval ? ["approve", "reject"] : ["accept", "decline"];
             return (
               <div className="queue-item" key={e.escalation_id}>
                 <div>
-                  <div className="queue-kind">{escalationKind(e.kind)}</div>
+                  <div className="queue-kind">{escalationKind(e.kind)} <span className="mono">{e.escalation_id}</span></div>
                   <p><WithIds text={e.summary} /></p>
                 </div>
-                {canAct ? (
-                  <div className="queue-actions">
-                    <button type="button" className="btn" disabled={!!h?.busy} aria-label={`Approve ${e.po_id}`} onClick={() => decide(e, "approve")}>
-                      {h?.busy === "approve" ? "Approving" : "Approve"}
-                    </button>
-                    <button type="button" className="btn neg" disabled={!!h?.busy} aria-label={`Reject ${e.po_id}`} onClick={() => decide(e, "reject")}>
-                      {h?.busy === "reject" ? "Rejecting" : "Reject"}
-                    </button>
-                  </div>
+                <EscalationContext e={e} why={ask.why} />
+                {canAnswer ? (
+                  <>
+                    <div className="queue-actions">
+                      <input
+                        className="queue-note"
+                        type="text"
+                        placeholder="Note (optional)"
+                        aria-label={`Note for ${e.escalation_id}`}
+                        value={notes[e.escalation_id] ?? ""}
+                        disabled={!!h?.busy}
+                        onChange={(ev) => setNotes((n) => ({ ...n, [e.escalation_id]: ev.target.value }))}
+                      />
+                      <span className="queue-buttons">
+                        <button type="button" className="btn" disabled={!!h?.busy} aria-label={`${ask.yes} ${e.po_id ?? e.escalation_id}`} onClick={() => decide(e, yes)}>
+                          {h?.busy === yes ? "Saving" : ask.yes}
+                        </button>
+                        <button type="button" className="btn neg" disabled={!!h?.busy} aria-label={`${ask.no} ${e.po_id ?? e.escalation_id}`} onClick={() => decide(e, no)}>
+                          {h?.busy === no ? "Saving" : ask.no}
+                        </button>
+                      </span>
+                    </div>
+                    <p className="queue-done">{ask.hint}</p>
+                  </>
                 ) : (
-                  e.kind === "APPROVAL" && <p className="queue-done">Approve or reject once the run finishes.</p>
+                  <p className="queue-done">{isApproval ? "Approve or reject" : "Answer"} once the run finishes.</p>
                 )}
                 {h?.message && !h.busy && <p className={`queue-result ${h.failed ? "neg" : ""}`} role="status">{h.message}</p>}
               </div>
@@ -288,7 +307,9 @@ function Queue({ summary, hasRun, runId, onChanged }: { summary: RunSummary | nu
           })}
         </div>
       )}
-      {open.some((e) => e.kind !== "APPROVAL") && <p className="queue-done" style={{ marginTop: 4 }}>Items without buttons need a person outside the agent.</p>}
+      {open.some((e) => e.kind !== "APPROVAL") && (
+        <p className="queue-done" style={{ marginTop: 4 }}>Answering an escalation records your decision with your note. It does not re-run the agent, and the run's score stays the same.</p>
+      )}
       {closed.length > 0 && (
         <div className="queue" style={open.length ? { borderTop: "1px solid var(--rule)", marginTop: 4 } : undefined}>
           {closed.map((e) => {
@@ -297,6 +318,7 @@ function Queue({ summary, hasRun, runId, onChanged }: { summary: RunSummary | nu
               <div className="queue-item" key={e.escalation_id} style={{ padding: "10px 0" }}>
                 <p className="queue-done">
                   <span className="mono">{e.escalation_id}</span> {escalationKind(e.kind).toLowerCase()}, {humanize(e.status).toLowerCase()}
+                  {e.answer_note && <>: <q>{e.answer_note}</q></>}
                 </p>
                 {h?.message && <p className={`queue-result ${h.failed ? "neg" : ""}`} role="status">{h.message}</p>}
               </div>
@@ -305,5 +327,67 @@ function Queue({ summary, hasRun, runId, onChanged }: { summary: RunSummary | nu
         </div>
       )}
     </section>
+  );
+}
+
+/* ---------- the context a person needs to answer an escalation ---------- */
+
+const COUNT_KEY = /qty|quantity|units|cases|days|count|need|demand/i; // checked first: "budget_max_qty" is units
+const MONEY_KEY = /cost|budget|value|price|spend|amount|dollars/i;
+
+function factLabel(key: string): string {
+  return humanize(key).replace(/\b(sku|po|id)\b/gi, (w) => w.toUpperCase());
+}
+
+function factValue(key: string, v: unknown): string {
+  if (typeof v === "number") {
+    return !COUNT_KEY.test(key) && MONEY_KEY.test(key) ? money(v) : v.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  }
+  if (typeof v === "boolean") return v ? "Yes" : "No";
+  if (Array.isArray(v)) return v.map((x) => (typeof x === "object" ? JSON.stringify(x) : String(x))).join(", ");
+  if (v && typeof v === "object") return JSON.stringify(v);
+  return String(v);
+}
+
+/** "CODE: message" -> the parts; a finding without a code is all message. */
+function splitFinding(f: string): { code: string | null; message: string } {
+  const m = /^([A-Z][A-Z0-9_]+):\s*(.*)$/s.exec(f);
+  return m ? { code: m[1], message: m[2] } : { code: null, message: f };
+}
+
+function EscalationContext({ e, why }: { e: Escalation; why: string }) {
+  const details = e.details ?? {};
+  const findings = Array.isArray(details.findings) ? details.findings.map(String) : [];
+  const facts = Object.entries(details).filter(([k, v]) => {
+    if (k === "findings" || v === null || v === "" || (Array.isArray(v) && v.length === 0)) return false;
+    return !(e.kind === "VERIFICATION_FAILED" && k === "outcome" && v === "DECIDED"); // the normal case, says nothing
+  });
+  return (
+    <div className="queue-context">
+      <p className="queue-why">{why}</p>
+      {findings.length > 0 && (
+        <ul className="queue-findings" aria-label="Verifier findings">
+          {findings.map((f, i) => {
+            const { code, message } = splitFinding(f);
+            return (
+              <li key={i}>
+                {code && <span className="mono">{humanize(code)}</span>}
+                <span><WithIds text={message} /></span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {facts.length > 0 && (
+        <dl className="facts">
+          {facts.map(([k, v]) => (
+            <div key={k}>
+              <dt>{factLabel(k)}</dt>
+              <dd><WithIds text={factValue(k, v)} /></dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </div>
   );
 }

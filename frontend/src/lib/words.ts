@@ -49,6 +49,42 @@ export function escalationKind(kind: string): string {
   }
 }
 
+/** What an escalation is asking for, and the yes/no labels and their meaning for answering one. */
+export function escalationAsk(kind: string): { why: string; yes: string; no: string; hint: string } {
+  switch (kind) {
+    case "APPROVAL": return {
+      why: "This PO is over the approval limit, so it is held and the supplier has not been contacted.",
+      yes: "Approve", no: "Reject",
+      hint: "Approve sends the PO to the supplier. Reject cancels it.",
+    };
+    case "BUDGET_INCREASE": return {
+      why: "The agent says the category budget is too small for what it thinks is needed, and asks for more.",
+      yes: "Approve increase", no: "Decline",
+      hint: "Approve if the extra spend is justified, decline if the shortfall should stand. Either way the budget and the POs stay as they are; this records your call.",
+    };
+    case "VERIFICATION_FAILED": return {
+      why: "After the run, the verifier checked the agent's final answer against the database and found problems nobody fixed.",
+      yes: "Resolved", no: "Dismiss",
+      hint: "Mark resolved if the finding is right and you have dealt with it, dismiss if the verifier got it wrong.",
+    };
+    case "INVESTIGATION": return {
+      why: "The agent says the data cannot support a decision and asks a person to look into it.",
+      yes: "Resolved", no: "Dismiss",
+      hint: "Mark resolved once the data has been looked into, dismiss if there is nothing to investigate.",
+    };
+    case "SUPPLIER_ISSUE": return {
+      why: "The agent hit a problem with a supplier it cannot fix itself.",
+      yes: "Resolved", no: "Dismiss",
+      hint: "Mark resolved once the supplier problem is handled, dismiss if it is not a real problem.",
+    };
+    default: return {
+      why: "The agent asks a person to decide.",
+      yes: "Accept", no: "Decline",
+      hint: "Your answer is recorded with your note.",
+    };
+  }
+}
+
 export function outcomeMessage(outcome: string): string {
   switch (outcome) {
     case "INTERRUPTED": return "The server stopped before this run finished.";

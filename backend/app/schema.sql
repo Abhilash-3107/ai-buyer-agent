@@ -168,7 +168,7 @@ CREATE TABLE escalations (
     po_id         TEXT,
     summary       TEXT NOT NULL,
     details_json  TEXT NOT NULL,
-    status        TEXT NOT NULL DEFAULT 'OPEN', -- 'OPEN' | 'APPROVED' | 'REJECTED'
+    status        TEXT NOT NULL DEFAULT 'OPEN', -- 'OPEN' | 'APPROVED' | 'REJECTED' (APPROVAL) | 'ACCEPTED' | 'DECLINED' (others)
     created_at    TEXT NOT NULL
 );
 

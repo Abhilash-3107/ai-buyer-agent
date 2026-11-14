@@ -73,6 +73,31 @@ def _rows(live: Live, sql: str, *params) -> list[dict]:
         conn.close()
 
 
+def _details(raw: str | None) -> dict:
+    try:
+        parsed = json.loads(raw or "{}")
+    except ValueError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {"value": parsed}
+
+
+_ANSWERS = "'PO_APPROVED', 'PO_REJECTED', 'ESCALATION_ACCEPTED', 'ESCALATION_DECLINED'"
+
+
+def _escalations(live: Live) -> list[dict]:
+    """Each escalation with the context a person needs to answer it: its details (the verifier's findings, the
+    agent's numbers, the approval rule) and, once answered, the note they left."""
+    rows = _rows(live, "SELECT e.escalation_id, e.kind, e.po_id, e.summary, e.details_json, e.status, e.created_at, "
+                       "(SELECT json_extract(a.details_json, '$.note') FROM audit_log a "
+                       " WHERE a.actor = 'human' AND a.action IN (" + _ANSWERS + ") "
+                       # a PO approval is audited against the PO and names its escalation; any other against itself
+                       " AND (a.entity_id = e.escalation_id OR json_extract(a.details_json, '$.escalation_id') = e.escalation_id) "
+                       " ORDER BY a.rowid DESC LIMIT 1) AS answer_note "
+                       "FROM escalations e ORDER BY e.rowid")
+    return [{**{k: v for k, v in r.items() if k != "details_json"}, "details": _details(r["details_json"]),
+             "answer_note": r["answer_note"] or None} for r in rows]
+
+
 def _summary(live: Live) -> dict:
     run = live.run
     return {
@@ -84,8 +109,7 @@ def _summary(live: Live) -> dict:
                   "po.qty_confirmed, po.unit_cost, ROUND(po.qty_ordered * po.unit_cost, 2) AS value, "
                   "po.expected_arrival, po.created_by, po.parent_po_id FROM purchase_orders po "
                   "JOIN suppliers s ON s.supplier_id = po.supplier_id WHERE po.sku = ? ORDER BY po.po_id", run.sku),
-        "escalations": _rows(live, "SELECT escalation_id, kind, po_id, summary, status, created_at "
-                                   "FROM escalations ORDER BY rowid"),
+        "escalations": _escalations(live),
         "totals": _totals(live)}
 
 
@@ -195,6 +219,17 @@ def approve(run_id: str, escalation_id: str, body: Note | None = None) -> dict:
 @router.post("/api/runs/{run_id}/escalations/{escalation_id}/reject")
 def reject(run_id: str, escalation_id: str, body: Note | None = None) -> dict:
     return _decide(run_id, escalation_id, body, actions.reject_po)
+
+
+@router.post("/api/runs/{run_id}/escalations/{escalation_id}/accept")
+def accept(run_id: str, escalation_id: str, body: Note | None = None) -> dict:
+    """Answer a non-approval escalation (a budget increase, an investigation...) with yes. Records only."""
+    return _decide(run_id, escalation_id, body, actions.accept_escalation)
+
+
+@router.post("/api/runs/{run_id}/escalations/{escalation_id}/decline")
+def decline(run_id: str, escalation_id: str, body: Note | None = None) -> dict:
+    return _decide(run_id, escalation_id, body, actions.decline_escalation)
 
 
 @router.get("/api/eval")

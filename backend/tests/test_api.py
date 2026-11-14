@@ -114,6 +114,10 @@ def test_approve_submits_the_held_po_to_the_supplier(client, monkeypatch):
     esc = pending_escalation(s)
     assert (esc["status"], po(s, esc["po_id"])["status"]) == ("OPEN", "PENDING_APPROVAL")
 
+    # the person deciding sees why it is held, not just a one-line summary
+    assert set(esc) == {"escalation_id", "kind", "po_id", "summary", "details", "status", "created_at", "answer_note"}
+    assert esc["details"]["po_value"] == 2376 and esc["details"]["reason"] and esc["answer_note"] is None
+
     r = client.post(f"/api/runs/{run_id}/escalations/{esc['escalation_id']}/approve", json={"note": "ok"})
     assert r.status_code == 200
     body = r.json()
@@ -121,7 +125,7 @@ def test_approve_submits_the_held_po_to_the_supplier(client, monkeypatch):
 
     s = client.get(f"/api/runs/{run_id}").json()
     assert po(s, esc["po_id"])["status"] == "CONFIRMED" and po(s, esc["po_id"])["qty_confirmed"] == 396
-    assert pending_escalation(s)["status"] == "APPROVED"
+    assert pending_escalation(s)["status"] == "APPROVED" and pending_escalation(s)["answer_note"] == "ok"
 
     again = client.post(f"/api/runs/{run_id}/escalations/{esc['escalation_id']}/approve", json={"note": "x"})
     assert again.status_code == 409 and "detail" in again.json()
@@ -138,6 +142,33 @@ def test_reject_cancels_the_held_po(client, monkeypatch):
     assert r.status_code == 200 and r.json()["supplier"] is None
     s = client.get(f"/api/runs/{run_id}").json()
     assert po(s, esc["po_id"])["status"] == "CANCELLED" and pending_escalation(s)["status"] == "REJECTED"
+
+
+@pytest.mark.parametrize("verb, status", [("accept", "ACCEPTED"), ("decline", "DECLINED")])
+def test_a_human_answers_a_budget_escalation_without_touching_pos_or_the_score(client, monkeypatch, verb, status):
+    use_script(monkeypatch, *S4_SCRIPT)
+    run_id = start(client, "S4-BUDGET")
+    read_events(client, run_id)
+    before = client.get(f"/api/runs/{run_id}").json()
+    budget = next(e for e in before["escalations"] if e["kind"] == "BUDGET_INCREASE")
+    held = pending_escalation(before)
+
+    r = client.post(f"/api/runs/{run_id}/escalations/{budget['escalation_id']}/{verb}", json={"note": "fine"})
+    assert r.status_code == 200 and r.json()["ok"] and r.json()["supplier"] is None
+
+    after = client.get(f"/api/runs/{run_id}").json()
+    assert next(e for e in after["escalations"] if e["escalation_id"] == budget["escalation_id"])["status"] == status
+    assert after["purchase_orders"] == before["purchase_orders"] and after["scorecard"] == before["scorecard"]
+    with sqlite3.connect(next(get_settings().runs_dir.glob(f"*__{run_id}.db"))) as conn:
+        (details,) = conn.execute("SELECT details_json FROM audit_log WHERE action = ?", (f"ESCALATION_{status}",)).fetchone()
+    assert json.loads(details)["note"] == "fine"
+    answered = next(e for e in after["escalations"] if e["escalation_id"] == budget["escalation_id"])
+    assert answered["answer_note"] == "fine" and held["answer_note"] is None
+
+    # answered once; an approval cannot be answered this way, and a budget request cannot be approved as a PO
+    assert client.post(f"/api/runs/{run_id}/escalations/{budget['escalation_id']}/accept", json={}).status_code == 409
+    assert client.post(f"/api/runs/{run_id}/escalations/{held['escalation_id']}/accept", json={}).status_code == 409
+    assert client.post(f"/api/runs/{run_id}/escalations/{budget['escalation_id']}/approve", json={}).status_code == 409
 
 
 def _race(client, run_id, esc_id, verbs):
@@ -209,6 +240,8 @@ def test_a_failed_run_is_reported_not_hidden(client, monkeypatch):
     assert s["outcome"] == "LLM_ERROR" and s["decision"] is None
     assert s["verification"]["passed"] is False and s["scorecard"]["passed"] is False
     assert any(e["kind"] == "INVESTIGATION" or e["status"] == "OPEN" for e in s["escalations"])  # the run was flagged
+    flagged = [e for e in s["escalations"] if e["kind"] == "VERIFICATION_FAILED"]
+    assert all(e["details"].get("findings") for e in flagged)  # the reason travels with the flag
 
 
 def test_history_survives_a_server_restart(client, monkeypatch):

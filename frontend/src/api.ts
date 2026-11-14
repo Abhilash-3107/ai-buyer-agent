@@ -41,6 +41,9 @@ const post = (body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 
+/** approve/reject release or cancel a held PO; accept/decline answer any other escalation (records only). */
+export type Verb = "approve" | "reject" | "accept" | "decline";
+
 export const api = {
   health: () => request<Health>("/api/health"),
   scenarios: () => request<Scenario[]>("/api/scenarios"),
@@ -49,7 +52,7 @@ export const api = {
   eval: () => request<EvalReport[]>("/api/eval"),
   startRun: (scenarioId: string) =>
     request<{ run_id: string; scenario_id: string }>("/api/runs", post({ scenario_id: scenarioId })),
-  decide: (runId: string, escalationId: string, verb: "approve" | "reject", note = "") =>
+  decide: (runId: string, escalationId: string, verb: Verb, note = "") =>
     request<ApprovalResult>(
       `/api/runs/${encodeURIComponent(runId)}/escalations/${encodeURIComponent(escalationId)}/${verb}`,
       post({ note }),

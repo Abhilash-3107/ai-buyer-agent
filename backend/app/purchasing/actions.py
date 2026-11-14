@@ -309,6 +309,34 @@ def approve_po(conn: sqlite3.Connection, run: Run, escalation_id: str, note: str
                    escalation_id=escalation_id)
 
 
+def _answer_escalation(conn: sqlite3.Connection, run: Run, escalation_id: str, note: str, status: str,
+                       attempt: str) -> ActionResult:
+    """Human side: close an open non-approval escalation with an answer. It records the answer only: nothing is
+    bought, the budget is not changed and the agent is not re-run, so the run's scorecard stays as it was."""
+    if not conn.in_transaction:
+        conn.execute("BEGIN IMMEDIATE")
+    claimed = conn.execute("UPDATE escalations SET status = ? WHERE escalation_id = ? AND kind != 'APPROVAL' "
+                           "AND status = 'OPEN'", (status, escalation_id)).rowcount
+    if not claimed:
+        return _refuse(conn, run, ActionStatus.NOT_ALLOWED, attempt, None,
+                       f"{escalation_id} is not an open escalation you can answer", actor="human")
+    esc = conn.execute("SELECT kind, po_id FROM escalations WHERE escalation_id = ?", (escalation_id,)).fetchone()
+    audit(conn, run.run_id, "human", f"ESCALATION_{status}", escalation_id,
+          {"kind": esc["kind"], "po_id": esc["po_id"], "note": note})
+    return _result(ActionStatus.WRITTEN, f"{escalation_id} is {status.lower()}. Your answer is on record; "
+                   "no PO was created or changed.", po_id=esc["po_id"], escalation_id=escalation_id)
+
+
+@_atomic
+def accept_escalation(conn: sqlite3.Connection, run: Run, escalation_id: str, note: str) -> ActionResult:
+    return _answer_escalation(conn, run, escalation_id, note, "ACCEPTED", "accept_escalation")
+
+
+@_atomic
+def decline_escalation(conn: sqlite3.Connection, run: Run, escalation_id: str, note: str) -> ActionResult:
+    return _answer_escalation(conn, run, escalation_id, note, "DECLINED", "decline_escalation")
+
+
 @_atomic
 def reject_po(conn: sqlite3.Connection, run: Run, escalation_id: str, note: str) -> ActionResult:
     """Human side: a held PO never reaches the supplier."""
