@@ -95,10 +95,8 @@ export function RunView({ scenario, runs, runId, health, starting, startError, o
         <>
           <FindingLine finding={f} />
           <LoopStrip loops={strip} />
-          <div className="body-grid">
-            <Trace hasRun={hasRun} events={events} summary={summary} connection={connection} onReconnect={state.reconnect} />
-            <Outcome scenario={scenario} summary={summary} hasRun={hasRun} runId={runId} sku={sku} onChanged={state.refresh} />
-          </div>
+          <Trace hasRun={hasRun} runId={runId} events={events} summary={summary} connection={connection} onReconnect={state.reconnect} />
+          <Outcome scenario={scenario} summary={summary} hasRun={hasRun} runId={runId} sku={sku} onChanged={state.refresh} />
         </>
       )}
     </div>

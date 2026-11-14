@@ -7,6 +7,9 @@ export const count = (n: number) => int.format(n);
 export const compact = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 export const seconds = (n: number) => `${n.toFixed(n < 10 ? 1 : 0)} s`;
 
+/** 0.047 -> "47 ms", 68.4 -> "68 s". */
+export const duration = (n: number) => (n < 1 ? `${Math.round(n * 1000)} ms` : seconds(n));
+
 export function ordinal(n: number): string {
   const s = ["th", "st", "nd", "rd"];
   const v = n % 100;

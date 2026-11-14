@@ -1,6 +1,6 @@
 import type { ChatMessage, HarnessStep, ToolDef, TraceEvent } from "../types";
-import { count, ordinal } from "./format";
-import { humanize, type Tone } from "./words";
+import { count, ordinal, plural } from "./format";
+import { decisionWord, humanize, type Tone } from "./words";
 
 /* The trace as the page shows it. Everything here is derived from the event list (plan section 11):
    no business logic, only grouping and wording. */
@@ -8,17 +8,13 @@ import { humanize, type Tone } from "./words";
 export const WRITE_STATUSES = ["WRITTEN", "BLOCKED", "NEEDS_JUSTIFICATION", "PENDING_APPROVAL", "NOT_ALLOWED"];
 
 export interface Call {
-  seq: number;
   name: string;
   args: Record<string, unknown>;
   by: string;
   callId?: string;
-  steps: HarnessStep[]; // what the harness did for this call: its request check, then the write pipeline
   result?: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   ok?: boolean;
 }
-
-export type Actor = "harness" | "llm";
 
 /** One model call, as a Langfuse-style generation: what was sent, what was offered, what came back. */
 export interface Generation {
@@ -42,126 +38,211 @@ export interface ToolUse {
   preloaded: Set<string>;
 }
 
-/** depth: 0 for the run, each generation and each tool run, 1 for the harness steps of a tool run. */
-type Base = { key: string; actor: Actor; depth: 0 | 1 };
-export type Item = Base &
-  (
-    | { kind: "started"; scenarioId: string; sku: string; trigger: Record<string, any> } // eslint-disable-line @typescript-eslint/no-explicit-any
-    | { kind: "preload"; calls: Call[] }
-    | { kind: "generation"; gen: Generation; use: ToolUse; finished: boolean }
-    | { kind: "tool"; call: Call }
-    | { kind: "step"; step: HarnessStep; call: Call }
-    | { kind: "verification"; passed: boolean; round: number; findings: { code: string; message: string }[] }
-    | { kind: "flagged"; message: string; findings: string[] }
-    | { kind: "error"; message: string }
-    | { kind: "note"; text: string }
-    | { kind: "finished"; outcome: string; steps: number; latency: number; tokensIn: number; tokensOut: number }
-  );
+export type NodeType = "agent" | "span" | "generation" | "tool" | "guardrail" | "event";
 
-export function buildTimeline(events: TraceEvent[]): Item[] {
-  const items: Item[] = [];
-  const preload: Call[] = [];
-  let preloadAdded = false;
-  const pending: Call[] = [];
+/** One node of the trace tree: the run, the preload span, a model call, a tool run, or a harness check or event. */
+export interface TraceNode {
+  id: string; // derived from the event seq, so selection and expansion survive new events
+  type: NodeType;
+  name: string;
+  summary?: { text: string; tone: Tone }; // the short result on the right of the row
+  start: number; // seconds since the run started
+  end: number | null; // null while it runs
+  tokens?: { in: number; out: number };
+  requestedBy?: string; // "LLM call 3" for a model's tool call, "Code" for a preloaded read
+  recovered?: boolean; // the model wrote this call as text and the harness read it from there
+  input?: unknown;
+  output?: unknown;
+  metadata?: Record<string, unknown>;
+  detail?: string; // the harness's sentence for a check or event
+  items?: { code?: string; message: string }[]; // violations or findings
+  gen?: Generation;
+  use?: ToolUse;
+  children: TraceNode[];
+}
+
+type Data = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+const GATES = ["approval", "supplier"]; // steps that are something happening, not a check
+
+export function buildTree(events: TraceEvent[], finished = events.some((e) => e.type === "run_finished")): TraceNode {
+  const root: TraceNode = { id: "root", type: "agent", name: "Run", summary: { text: "Running", tone: "neutral" }, start: 0, end: null, children: [] };
   const use: ToolUse = { calls: {}, preloaded: new Set() };
   const generations: Generation[] = [];
+  const genNodes: TraceNode[] = [];
+  const pending: { call: Call; node: TraceNode }[] = [];
+  const validators = new Map<string, TraceNode>(); // by tool node id: the violations arrive with the result
+  const recovered = new Set<string>();
+  let preload: TraceNode | undefined;
   let tools: ToolDef[] = [];
-  const finished = events.some((e) => e.type === "run_finished");
-  const h = (key: string, rest: object, depth: 0 | 1 = 0) => items.push({ key, actor: "harness", depth, ...rest } as Item);
+  let decision: Data | undefined;
+  let end: Data | undefined;
 
-  const inTool = () => pending.some((c) => c.by === "agent");
+  const note = (e: TraceEvent, node: Omit<TraceNode, "id" | "start" | "end" | "children" | "metadata">, parent: TraceNode) =>
+    parent.children.push({ id: `n${e.seq}`, start: e.ts, end: e.ts, metadata: e.data, children: [], ...node });
+  /** The tool run in progress, which is what a check or event during it belongs to. */
+  const current = () => [...pending].reverse().find((p) => p.call.by === "agent")?.node;
+
+  const openGeneration = (seq: number, ts: number, delta: ChatMessage[]) => {
+    const prev = generations[generations.length - 1];
+    const gen: Generation = {
+      n: generations.length + 1, model: null, delta, context: [...(prev?.context ?? []), ...delta], tools,
+      responded: false, text: "", toolCalls: [], finishReason: null, tokensIn: null, tokensOut: null, latency: null,
+    };
+    const node: TraceNode = {
+      id: `g${seq}`, type: "generation", name: `LLM call ${gen.n}`, gen, use, start: ts, end: null, children: [],
+      summary: finished ? { text: "No response", tone: "warn" } : { text: "Waiting for the model", tone: "neutral" },
+    };
+    generations.push(gen);
+    genNodes.push(node);
+    root.children.push(node);
+  };
 
   for (const e of events) {
     const d = e.data;
     switch (e.type) {
       case "run_started":
-        h(`s${e.seq}`, { kind: "started", scenarioId: d.scenario_id, sku: d.sku, trigger: d.trigger ?? {} });
+        root.name = d.scenario_id ?? root.name;
+        root.start = e.ts;
+        root.input = { scenario_id: d.scenario_id, sku: d.sku, node_id: d.node_id, trigger: d.trigger ?? {} };
         break;
       case "tool_call": {
-        const call: Call = { seq: e.seq, name: d.name, args: d.args ?? {}, by: d.by ?? "agent", callId: d.call_id, steps: [] };
-        pending.push(call);
-        if (call.by === "harness") {
-          use.preloaded.add(call.name);
-          if (!preloadAdded) {
-            preloadAdded = true;
-            h("preload", { kind: "preload", calls: preload });
-          }
-          preload.push(call);
-        } else {
+        const call: Call = { name: d.name, args: d.args ?? {}, by: d.by ?? "agent", callId: d.call_id };
+        const node: TraceNode = { id: `t${e.seq}`, type: "tool", name: call.name, start: e.ts, end: null, input: call.args, metadata: { call_id: call.callId }, children: [] };
+        node.summary = resultSummary(call);
+        if (call.by === "agent") {
+          const gen = genNodes[genNodes.length - 1];
           use.calls[call.name] = (use.calls[call.name] ?? 0) + 1;
-          h(`t${e.seq}`, { kind: "tool", call });
+          node.requestedBy = gen?.name;
+          node.recovered = !!call.callId && recovered.has(call.callId);
+          (gen ?? root).children.push(node);
+        } else {
+          use.preloaded.add(call.name);
+          node.requestedBy = "Code";
+          if (!preload) {
+            preload = { id: "preload", type: "span", name: "Preload context", requestedBy: "Code", start: e.ts, end: null, children: [] };
+            root.children.push(preload);
+          }
+          preload.children.push(node);
+          preload.summary = { text: plural(preload.children.length, "read"), tone: "neutral" };
         }
+        pending.push({ call, node });
         break;
       }
       case "harness_step": {
-        const call = pending.find((c) => c.callId === d.call_id);
-        if (!call) break;
-        call.steps.push(d as HarnessStep);
-        h(`h${e.seq}`, { kind: "step", step: d as HarnessStep, call }, 1);
+        const step = d as HarnessStep;
+        const parent = pending.find((p) => p.call.callId === d.call_id)?.node ?? current() ?? root;
+        const v = stepView(step);
+        const node: TraceNode = {
+          id: `h${e.seq}`, type: GATES.includes(step.stage) ? "event" : "guardrail", name: v.label, summary: { text: v.text, tone: v.tone },
+          detail: step.detail, start: e.ts, end: e.ts, metadata: d, children: [],
+        };
+        parent.children.push(node);
+        if (step.stage === "validator") validators.set(parent.id, node);
         break;
       }
       case "tool_result": {
-        const at = pending.findIndex((c) => (d.call_id ? c.callId === d.call_id : c.name === d.name));
-        const call = at >= 0 ? pending.splice(at, 1)[0] : undefined;
-        if (!call) break;
+        const at = pending.findIndex((p) => (d.call_id ? p.call.callId === d.call_id : p.call.name === d.name));
+        if (at < 0) break;
+        const { call, node } = pending.splice(at, 1)[0];
         call.result = d.result;
         call.ok = d.ok;
+        node.end = e.ts;
+        node.output = d.result;
+        node.summary = resultSummary(call);
+        node.metadata = { call_id: call.callId, ok: d.ok, ...(node.recovered ? { recovered_from_text: true } : {}) };
+        const violations: { code: string; severity: string; message: string }[] = call.result?.violations ?? [];
+        const validator = validators.get(node.id);
+        if (validator && violations.length > 0)
+          validator.items = violations.map((x) => ({ code: x.code, message: `${x.severity === "warning" ? "Warning: " : ""}${x.message}` }));
+        if (preload && call.by !== "agent") preload.end = e.ts;
         break;
       }
-      case "llm_request": {
-        const delta: ChatMessage[] = d.messages ?? [];
+      case "llm_request":
         if (d.tools) tools = d.tools;
-        const prev = generations[generations.length - 1];
-        const gen: Generation = {
-          n: generations.length + 1, model: null, delta, context: [...(prev?.context ?? []), ...delta], tools,
-          responded: false, text: "", toolCalls: [], finishReason: null, tokensIn: null, tokensOut: null, latency: null,
-        };
-        generations.push(gen);
-        items.push({ kind: "generation", key: `g${e.seq}`, actor: "llm", depth: 0, gen, use, finished });
+        openGeneration(e.seq, e.ts, d.messages ?? []);
         break;
-      }
       case "llm_response": {
+        // An old run may hold a response without its request: it gets a generation of its own.
+        if (genNodes.length === 0 || generations[generations.length - 1].responded) openGeneration(e.seq, Math.max(0, e.ts - (d.latency_s ?? 0)), []);
         const gen = generations[generations.length - 1];
-        if (!gen) break;
+        const node = genNodes[genNodes.length - 1];
         gen.responded = true;
         gen.model = d.model ?? null;
         gen.text = typeof d.text === "string" ? d.text.trim() : "";
-        gen.toolCalls = (d.tool_calls ?? []).map((c: any) => ({ id: c.id, name: c.name, arguments: c.arguments ?? {} })); // eslint-disable-line @typescript-eslint/no-explicit-any
+        gen.toolCalls = (d.tool_calls ?? []).map((c: Data) => ({ id: c.id, name: c.name, arguments: c.arguments ?? {} }));
         gen.finishReason = d.finish_reason ?? null;
         gen.tokensIn = d.usage?.input_tokens ?? null;
         gen.tokensOut = d.usage?.output_tokens ?? null;
         gen.latency = typeof d.latency_s === "number" ? d.latency_s : null;
+        node.end = e.ts;
+        node.summary = gen.toolCalls.length === 0 ? { text: "Replied with text", tone: "neutral" } : undefined; // the tool runs below say what it asked for
+        if (gen.tokensIn !== null) node.tokens = { in: gen.tokensIn, out: gen.tokensOut ?? 0 };
+        node.metadata = { model: gen.model, finish_reason: gen.finishReason, input_tokens: gen.tokensIn, output_tokens: gen.tokensOut, latency_s: gen.latency };
         break;
       }
-      case "recovered_tool_call":
-        h(`n${e.seq}`, { kind: "note", text: `Recovered a ${d.name} call written in the model's text` });
+      case "recovered_tool_call": {
+        if (d.call_id) recovered.add(d.call_id);
+        const node = genNodes[genNodes.length - 1];
+        if (node) node.summary = { text: `Wrote ${d.name} as text`, tone: "warn" };
         break;
+      }
       case "nudge":
-        h(`n${e.seq}`, { kind: "note", text: `Reminded the agent to act or decide (reminder ${d.count})` });
+        note(e, { type: "event", name: "Reminder sent", summary: { text: `Reminder ${d.count}`, tone: "neutral" }, detail: "The model made no tool call, so the harness reminded it to act or decide." }, root);
         break;
       case "budget_locked": {
         const parts: string[] = Array.isArray(d.key) ? d.key : [];
-        h(`n${e.seq}`, { kind: "note", text: `Retry limit reached for ${parts.slice(0, 2).join(" ") || "a write"}: further attempts are refused` }, inTool() ? 1 : 0);
+        note(e, {
+          type: "event", name: "Retry limit reached", summary: { text: "Writes locked", tone: "warn" },
+          detail: `Too many failed attempts for ${parts.slice(0, 2).join(" ") || "a write"}: further attempts are refused.`,
+        }, current() ?? root);
         break;
       }
-      case "verification":
-        h(`v${e.seq}`, { kind: "verification", passed: !!d.passed, round: d.round ?? 1, findings: (d.findings ?? []).map((f: any) => ({ code: f.code, message: f.message })) }, // eslint-disable-line @typescript-eslint/no-explicit-any
-          inTool() ? 1 : 0); // the one a submit_decision triggers sits under its tool row
+      case "decision":
+        decision = d;
         break;
+      case "verification": {
+        const findings: { code: string; message: string }[] = (d.findings ?? []).map((f: Data) => ({ code: f.code, message: f.message }));
+        const round = d.round ?? 1;
+        note(e, {
+          type: "guardrail", name: "Verifier", items: findings,
+          summary: d.passed ? { text: `Passed on try ${round}`, tone: "pos" } : { text: `Found ${plural(findings.length, "problem")} on try ${round}`, tone: "neg" },
+        }, current() ?? root); // the one a submit_decision triggers sits under its tool run
+        break;
+      }
       case "flagged":
-        h(`f${e.seq}`, { kind: "flagged", message: d.message, findings: d.findings ?? [] });
+        note(e, { type: "event", name: "Flagged for a human", summary: { text: "Escalated", tone: "warn" }, detail: d.message, items: (d.findings ?? []).map((message: string) => ({ message })) }, root);
         break;
       case "error":
-        h(`e${e.seq}`, { kind: "error", message: d.message ?? "The run stopped with an error." });
+        note(e, { type: "event", name: "Error", summary: { text: "Run stopped", tone: "neg" }, detail: d.message ?? "The run stopped with an error." }, root);
         break;
       case "run_finished":
-        h(`r${e.seq}`, { kind: "finished", outcome: d.outcome, steps: d.steps, latency: d.latency_s, tokensIn: d.tokens_in, tokensOut: d.tokens_out });
+        end = { ...d, ts: e.ts };
         break;
       default:
-        break; // the decision is already visible as the submit_decision call
+        break;
     }
   }
-  return items;
+
+  if (finished) for (const { node } of pending) node.summary = { text: "No result", tone: "warn" }; // a run that ended mid-tool
+  const answered = generations.filter((g) => g.responded);
+  const tokensIn = end?.tokens_in ?? answered.reduce((s, g) => s + (g.tokensIn ?? 0), 0);
+  const tokensOut = end?.tokens_out ?? answered.reduce((s, g) => s + (g.tokensOut ?? 0), 0);
+  if (tokensIn + tokensOut > 0) root.tokens = { in: tokensIn, out: tokensOut };
+  root.end = end ? end.ts : null;
+  root.output = end ? { outcome: end.outcome, decision: decision ?? null } : undefined;
+  root.metadata = {
+    model: answered[0]?.model ?? null, generations: generations.length, tokens_in: tokensIn, tokens_out: tokensOut,
+    latency_s: end?.latency_s ?? null, verification_passed: end?.verification_passed ?? null,
+  };
+  if (end) {
+    root.summary = end.outcome === "DECIDED" && decision
+      ? { text: `${decisionWord(decision.decision)}, ${count(decision.new_units)} units`, tone: "neutral" }
+      : { text: humanize(end.outcome), tone: "neg" };
+  } else if (finished) {
+    root.summary = { text: "Did not finish", tone: "neg" };
+  }
+  return root;
 }
 
 const STAGES: Record<string, string> = { request: "Request", validator: "Validator", approval: "Approval", supplier: "Supplier" };

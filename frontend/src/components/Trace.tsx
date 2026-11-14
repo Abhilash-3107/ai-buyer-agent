@@ -1,9 +1,9 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ChatMessage, HarnessStep, RunSummary, TraceEvent } from "../types";
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import type { ChatMessage, RunSummary, TraceEvent } from "../types";
 import type { Connection } from "../hooks/useRun";
-import { buildTimeline, argEntries, isId, resultSummary, stepView, toolGroup, writeStatus, writeTone, type Call, type Generation as Gen, type Item, type ToolUse } from "../lib/trace";
-import { compact, count, plural, seconds } from "../lib/format";
-import { humanize, outcomeMessage, preloadName } from "../lib/words";
+import { argEntries, buildTree, isId, toolGroup, type Generation as Gen, type NodeType, type ToolUse, type TraceNode } from "../lib/trace";
+import { compact, count, duration, plural } from "../lib/format";
+import { humanize, type Tone } from "../lib/words";
 import { Chevron } from "./Icons";
 import { Empty } from "./States";
 
@@ -24,105 +24,6 @@ function Args({ args }: { args: Record<string, unknown> }) {
         </Fragment>
       ))}
     </>
-  );
-}
-
-/** What the harness has to say about a call: the validator's violations for a step, or the result's message or error otherwise. */
-function WriteBox({ call, step }: { call: Call; step?: HarnessStep }) {
-  const r = call.result;
-  if (step) {
-    const violations: { code: string; severity: string; message: string }[] = r?.violations ?? [];
-    if (violations.length === 0) return null;
-    return (
-      <div className={`write ${stepView(step).tone}`}>
-        <ul>
-          {violations.map((v, i) => (
-            <li key={i}>
-              <span className="code">{v.code}</span>
-              {v.severity === "warning" ? "Warning: " : ""}
-              {v.message}
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  }
-  if (!r) return null;
-  const status = writeStatus(r);
-  if (status) return r.message ? <div className={`write ${writeTone(status)}`}><p>{r.message}</p></div> : null;
-  if (r.ok === false && typeof r.error === "string") {
-    return (
-      <div className="write neg">
-        <p>{r.error}</p>
-      </div>
-    );
-  }
-  return null;
-}
-
-/** One tool call: preloaded reads show their arguments inline, a tool run (the harness's work) shows its result. */
-function CallRow({ call, compact = false }: { call: Call; compact?: boolean }) {
-  const [open, setOpen] = useState(false);
-  const summary = resultSummary(call);
-  const refused = call.steps.some((s) => s.stage === "request" && s.status !== "ACCEPTED");
-  // The steps already say what happened to a refused request, a write and a decision; the box covers the rest.
-  const explained = refused || call.name === "submit_decision" || call.steps.some((s) => s.stage !== "request");
-  return (
-    <div className={compact ? "py-1.5" : undefined}>
-      <button type="button" className="row-btn" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <Chevron open={open} />
-        {compact ? <span className="call-name">{call.name}</span> : <span className="gen-name">Tool <span className="call-name">{call.name}</span></span>}
-        <span className={`call-result ${summary.tone === "neutral" ? "" : summary.tone}`}>{summary.text}</span>
-      </button>
-      {compact && <div className="call-args"><Args args={call.args} /></div>}
-      {!compact && !explained && <WriteBox call={call} />}
-      {open && (
-        <div className="json">
-          <div>
-            <h4>Input</h4>
-            <pre>{JSON.stringify(call.args, null, 2)}</pre>
-          </div>
-          <div>
-            <h4>Output</h4>
-            <pre>{call.result === undefined ? "Waiting for the result" : JSON.stringify(call.result, null, 2)}</pre>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function StepRow({ step, call }: { step: HarnessStep; call: Call }) {
-  const v = stepView(step);
-  const violations = step.stage === "validator" && step.status !== "PASSED";
-  return (
-    <>
-      <div className="step-line">
-        <span className="step-label">{v.label}</span>
-        <span className={`pill ${v.tone === "neutral" ? "" : v.tone}`}>{v.text}</span>
-      </div>
-      {violations ? <WriteBox call={call} step={step} /> : step.detail && <p className="step-detail">{step.detail}</p>}
-    </>
-  );
-}
-
-function Preload({ calls }: { calls: Call[] }) {
-  const [open, setOpen] = useState(false);
-  const names = [...new Set(calls.map((c) => preloadName(c.name)))];
-  return (
-    <div>
-      <button type="button" className="row-btn preload" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <Chevron open={open} />
-        <span>Preloaded {calls.length} reads: {names.join(", ")}</span>
-      </button>
-      {open && (
-        <div style={{ marginLeft: 20 }}>
-          {calls.map((c) => (
-            <CallRow key={c.seq} call={c} compact />
-          ))}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -231,175 +132,294 @@ function GenerationOutput({ gen }: { gen: Gen }) {
   );
 }
 
-type GenTab = "input" | "tools" | "output";
+/* ---------- the tree ---------- */
 
-function Generation({ gen, use, finished }: { gen: Gen; use: ToolUse; finished: boolean }) {
-  const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<GenTab>("input");
-  const tabs: GenTab[] = gen.n === 1 ? ["input", "tools", "output"] : ["input", "output"];
-  const meta = gen.responded
-    ? [
-        gen.tokensIn !== null && `${compact(gen.tokensIn)} in / ${compact(gen.tokensOut ?? 0)} out`,
-        gen.latency !== null && seconds(gen.latency),
-      ].filter(Boolean).join(" · ")
-    : finished ? "No response" : "Waiting for the model";
-  const sub = [gen.model, gen.finishReason && humanize(gen.finishReason).toLowerCase()].filter(Boolean).join(" · ");
+const BADGES: Record<NodeType, string> = { agent: "AGENT", span: "SPAN", generation: "GEN", tool: "TOOL", guardrail: "GUARD", event: "EVENT" };
+const KINDS: Record<NodeType, string> = { agent: "Run", span: "Span", generation: "Model call", tool: "Tool", guardrail: "Check", event: "Event" };
+const toneClass = (tone?: Tone) => (tone && tone !== "neutral" ? tone : "");
+/** Checks and events happen at a moment, so only the rest have a duration. */
+const timed = (n: TraceNode): n is TraceNode & { end: number } => n.end !== null && n.type !== "guardrail" && n.type !== "event";
+const defaultOpen = (n: TraceNode) => n.id !== "preload";
+
+interface Row {
+  node: TraceNode;
+  parent?: TraceNode;
+}
+
+/** The rows on screen, in order: a collapsed node hides its children. */
+function flatten(node: TraceNode, isOpen: (n: TraceNode) => boolean, parent?: TraceNode, out: Row[] = []): Row[] {
+  out.push({ node, parent });
+  if (isOpen(node)) for (const c of node.children) flatten(c, isOpen, node, out);
+  return out;
+}
+
+function everyNode(node: TraceNode, out = new Map<string, TraceNode>()): Map<string, TraceNode> {
+  out.set(node.id, node);
+  for (const c of node.children) everyNode(c, out);
+  return out;
+}
+
+interface TreeProps {
+  selectedId: string;
+  stop: string; // the one item in the tab order
+  isOpen: (n: TraceNode) => boolean;
+  onSelect: (id: string) => void;
+  onToggle: (n: TraceNode) => void;
+}
+
+function Branch({ node, depth, t }: { node: TraceNode; depth: number; t: TreeProps }) {
+  const kids = node.children.length > 0;
+  const expanded = kids && t.isOpen(node);
+  const sub = [timed(node) && duration(node.end - node.start), node.tokens && `${compact(node.tokens.in)} / ${compact(node.tokens.out)} tok`].filter(Boolean).join(" · ");
+  const label = `${KINDS[node.type]} ${node.name}${node.summary ? `, ${node.summary.text}` : ""}`;
   return (
-    <div>
-      <button type="button" className="row-btn" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <Chevron open={open} />
-        <span className="gen-name">Generation {gen.n}</span>
-        <span className="call-result num">{meta}</span>
-      </button>
-      {sub && <div className="call-args">{sub}</div>}
-      {!open && gen.text && <p className="gen-text">{gen.text}</p>}
-      {!open && gen.toolCalls.map((c) => (
-        <div key={c.id} className="call-args requested"><span className="call-name">{c.name}</span> <Args args={c.arguments} /></div>
-      ))}
-      {open && (
-        <div className="gen-detail">
-          <div className="subtabs" role="tablist">
-            {tabs.map((t) => (
-              <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
-                {humanize(t)}
-              </button>
-            ))}
-          </div>
-          {tab === "input" && <GenerationInput gen={gen} />}
-          {tab === "tools" && <GenerationTools gen={gen} use={use} />}
-          {tab === "output" && <GenerationOutput gen={gen} />}
+    <li
+      role="treeitem"
+      data-id={node.id}
+      aria-level={depth + 1}
+      aria-label={label}
+      aria-expanded={kids ? expanded : undefined}
+      aria-selected={node.id === t.selectedId}
+      tabIndex={node.id === t.stop ? 0 : -1}
+    >
+      <div className="node-row" style={{ "--d": depth } as CSSProperties} onClick={() => t.onSelect(node.id)}>
+        {kids ? (
+          <span className="node-chev" aria-hidden="true" onClick={(e) => { e.stopPropagation(); t.onToggle(node); }}>
+            <Chevron open={expanded} />
+          </span>
+        ) : (
+          <span className="node-chev" aria-hidden="true" />
+        )}
+        <div className="node-line">
+          <span className={`type-badge ${node.type}`} aria-hidden="true">{BADGES[node.type]}</span>
+          <span className={`node-name ${node.type === "tool" ? "call-name" : ""}`} title={node.name}>{node.name}</span>
+          {node.recovered && <span className="node-chip" aria-hidden="true">from text</span>}
+          {node.summary && <span className={`node-sum ${toneClass(node.summary.tone)}`} title={node.summary.text}>{node.summary.text}</span>}
         </div>
+        {sub && <div className="node-sub num">{sub}</div>}
+      </div>
+      {expanded && (
+        <ul role="group">
+          {node.children.map((c) => (
+            <Branch key={c.id} node={c} depth={depth + 1} t={t} />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+/* ---------- the detail pane ---------- */
+
+function Json({ value, empty }: { value: unknown; empty: string }) {
+  if (value === undefined) return <p className="note-line">{empty}</p>;
+  return (
+    <div className="json">
+      <pre>{JSON.stringify(value, null, 2)}</pre>
+    </div>
+  );
+}
+
+function Facts({ node }: { node: TraceNode }) {
+  const model = node.gen?.model ?? (node.metadata?.model as string | null | undefined);
+  const facts: [string, ReactNode][] = [];
+  if (node.requestedBy) facts.push(["Requested by", node.requestedBy]);
+  if (node.type === "tool" || node.type === "span") facts.push(["Run by", "Code"]);
+  if (model) facts.push(["Model", model]);
+  if (timed(node)) facts.push(["Duration", duration(node.end - node.start)]);
+  if (node.tokens) facts.push(["Tokens", `${count(node.tokens.in)} in, ${count(node.tokens.out)} out`]);
+  if (facts.length === 0) return null;
+  return (
+    <dl className="facts">
+      {facts.map(([k, v]) => (
+        <div key={k}>
+          <dt>{k}</dt>
+          <dd>{v}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** A check or event in words: its status, the harness's sentence, and any violations or findings. */
+function CheckOutput({ node }: { node: TraceNode }) {
+  return (
+    <div className={`notice ${node.summary?.tone ?? "neutral"}`}>
+      {node.summary && <strong>{node.summary.text}</strong>}
+      {node.detail && <span>{node.detail}</span>}
+      {node.items && node.items.length > 0 && (
+        <ul>
+          {node.items.map((f, i) => (
+            <li key={i}>
+              {f.code && <span className="mono">{f.code} </span>}
+              {f.message}
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
 }
 
-function Findings({ findings }: { findings: { code: string; message: string }[] }) {
-  if (findings.length === 0) return null;
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <ul>
-      {findings.map((f, i) => (
-        <li key={i}>
-          <span className="mono">{f.code}</span> {f.message}
-        </li>
-      ))}
-    </ul>
+    <section className="detail-sec">
+      <h4>{title}</h4>
+      {children}
+    </section>
   );
 }
 
-function Body({ item }: { item: Item }) {
-  switch (item.kind) {
-    case "started": {
-      const t = item.trigger;
-      return (
-        <p>
-          Run started, trigger: {humanize(String(t.type ?? "unknown")).toLowerCase()} <Id value={String(t.rec_id ?? t.event_id ?? item.sku)} />
-        </p>
-      );
-    }
-    case "preload":
-      return <Preload calls={item.calls} />;
-    case "generation":
-      return <Generation gen={item.gen} use={item.use} finished={item.finished} />;
-    case "tool":
-      return <CallRow call={item.call} />;
-    case "step":
-      return <StepRow step={item.step} call={item.call} />;
-    case "verification":
-      return (
-        <div className={`notice ${item.passed ? "pos" : "neg"}`}>
-          <strong>
-            {item.passed ? "Verifier passed" : `Verifier found ${item.findings.length === 1 ? "a problem" : `${item.findings.length} problems`}`}
-            <span style={{ fontWeight: 400 }}>{` on try ${item.round}`}</span>
-          </strong>
-          <Findings findings={item.findings} />
-        </div>
-      );
-    case "flagged":
-      return (
-        <div className="notice warn">
-          <strong>Flagged for a human</strong>
-          <span>{item.message}</span>
-        </div>
-      );
-    case "error":
-      return (
-        <div className="notice neg">
-          <strong>The run stopped with an error</strong>
-          <span>{item.message}</span>
-        </div>
-      );
-    case "note":
-      return <p className="note-line">{item.text}</p>;
-    case "finished":
-      return item.outcome === "DECIDED" ? (
-        <p className="note-line num">
-          Run finished: {plural(item.steps, "generation")}, {seconds(item.latency)}, {count(item.tokensIn)} tokens in, {count(item.tokensOut)} out
-        </p>
-      ) : (
-        <div className="notice neg">
-          <strong>{humanize(item.outcome)}</strong>
-          <span>{outcomeMessage(item.outcome)}</span>
-        </div>
-      );
-  }
+function Detail({ node }: { node: TraceNode }) {
+  const gen = node.gen;
+  let input: ReactNode = null;
+  if (gen) input = <GenerationInput key={node.id} gen={gen} />;
+  else if (node.type === "agent" || node.type === "tool") input = <Json value={node.input} empty="No input." />;
+
+  let output: ReactNode;
+  if (gen) output = gen.responded ? <GenerationOutput gen={gen} /> : <p className="note-line">{node.summary?.text}.</p>;
+  else if (node.type === "agent" || node.type === "tool") output = <Json value={node.output} empty={node.type === "agent" ? "The run has not finished yet." : "Waiting for the result."} />;
+  else if (node.type === "span")
+    output = (
+      <div className="reads">
+        {node.children.map((c) => (
+          <div key={c.id}>
+            <span className="call-name">{c.name}</span>
+            <span className={`call-result ${toneClass(c.summary?.tone)}`}>{c.summary?.text}</span>
+          </div>
+        ))}
+      </div>
+    );
+  else output = <CheckOutput node={node} />;
+
+  return (
+    <>
+      <header className="detail-head">
+        <span className={`type-badge ${node.type}`}>{BADGES[node.type]}</span>
+        <h3 className={node.type === "tool" ? "call-name" : undefined}>{node.name}</h3>
+        {node.summary && <span className={`pill ${toneClass(node.summary.tone)}`}>{node.summary.text}</span>}
+        {node.recovered && <span className="pill warn">Recovered from text</span>}
+      </header>
+      <Facts node={node} />
+      {input && <Section title="Input">{input}</Section>}
+      <Section title="Output">{output}</Section>
+      {gen && gen.n === 1 && node.use && (
+        <details className="disclosure">
+          <summary>Tools offered</summary>
+          <GenerationTools gen={gen} use={node.use} />
+        </details>
+      )}
+      <details className="disclosure">
+        <summary>Metadata</summary>
+        <Json value={node.metadata} empty="No metadata." />
+      </details>
+    </>
+  );
 }
 
-/** One row of the single thread: a rail and tag saying who acted, then what happened. */
-function Row({ item }: { item: Item }) {
+/* ---------- the trace section ---------- */
+
+function TraceView({ events, live }: { events: TraceEvent[]; live: boolean }) {
+  const root = useMemo(() => buildTree(events, !live), [events, live]);
+  const index = useMemo(() => everyNode(root), [root]);
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [pick, setPick] = useState<string | null>(null); // the user's choice; until then a live run follows its newest node
+  const pane = useRef<HTMLDivElement>(null);
+  const refocus = useRef<string | null>(null);
+
+  const isOpen = (n: TraceNode) => open[n.id] ?? defaultOpen(n);
+  const rows = flatten(root, isOpen);
+  const selectedId = pick && index.has(pick) ? pick : live ? rows[rows.length - 1].node.id : root.id;
+  const selected = index.get(selectedId) ?? root;
+  const stop = rows.some((r) => r.node.id === selectedId) ? selectedId : root.id;
+
+  const setExpanded = (n: TraceNode, value: boolean) => setOpen((o) => ({ ...o, [n.id]: value }));
+  const select = (id: string, focus = false) => {
+    if (focus) refocus.current = id;
+    setPick(id);
+  };
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    const id = (e.target as HTMLElement).closest<HTMLElement>("[role=treeitem]")?.dataset.id;
+    const at = rows.findIndex((r) => r.node.id === id);
+    if (at < 0) return;
+    const { node, parent } = rows[at];
+    const kids = node.children.length > 0;
+    let to: string | undefined;
+    switch (e.key) {
+      case "ArrowDown": to = rows[at + 1]?.node.id; break;
+      case "ArrowUp": to = rows[at - 1]?.node.id; break;
+      case "Home": to = rows[0].node.id; break;
+      case "End": to = rows[rows.length - 1].node.id; break;
+      case "ArrowRight":
+        if (kids && !isOpen(node)) setExpanded(node, true);
+        else if (kids) to = node.children[0].id;
+        break;
+      case "ArrowLeft":
+        if (kids && isOpen(node)) setExpanded(node, false);
+        else to = parent?.id;
+        break;
+      case "Enter":
+      case " ": to = node.id; break;
+      default: return;
+    }
+    e.preventDefault();
+    if (to) select(to, true);
+  };
+
+  // Keyboard moves take focus along; a followed or chosen row scrolls into view inside the tree pane only.
+  useEffect(() => {
+    const p = pane.current;
+    if (!p) return;
+    if (refocus.current) p.querySelector<HTMLElement>(`[data-id="${refocus.current}"]`)?.focus();
+    refocus.current = null;
+    const row = p.querySelector<HTMLElement>(`[data-id="${selectedId}"] > .node-row`);
+    if (!row) return;
+    const a = p.getBoundingClientRect();
+    const b = row.getBoundingClientRect();
+    if (b.top < a.top) p.scrollTop -= a.top - b.top;
+    else if (b.bottom > a.bottom) p.scrollTop += b.bottom - a.bottom;
+  }, [selectedId, pick]);
+
+  const t: TreeProps = { selectedId, stop, isOpen, onSelect: select, onToggle: (n) => setExpanded(n, !isOpen(n)) };
   return (
-    <div className={`trace-item ${item.actor} d${item.depth}`}>
-      <span className="tag">{item.actor === "llm" ? "LLM" : "HARNESS"}</span>
-      <div className="trace-body">
-        <Body item={item} />
+    <div className="trace-split">
+      <div className="trace-tree" ref={pane}>
+        <ul role="tree" aria-label="Trace of the run" onKeyDown={onKeyDown}>
+          <Branch node={root} depth={0} t={t} />
+        </ul>
+        {live && (
+          <p className="trace-foot">
+            <span className="pulse" aria-hidden="true" />
+            {pick === null ? (
+              "The agent is working. This view follows the latest step."
+            ) : (
+              <>
+                The agent is working.
+                <button type="button" className="link-btn" onClick={() => setPick(null)}>Follow the latest step</button>
+              </>
+            )}
+          </p>
+        )}
       </div>
+      <section className="trace-detail" aria-label="Details of the selected step">
+        <Detail node={selected} />
+      </section>
     </div>
   );
 }
 
 interface Props {
   hasRun: boolean;
+  runId: string | null;
   events: TraceEvent[];
   summary: RunSummary | null;
   connection: Connection;
   onReconnect: () => void;
 }
 
-export function Trace({ hasRun, events, summary, connection, onReconnect }: Props) {
-  const items = useMemo(() => buildTimeline(events), [events]);
-  const scroller = useRef<HTMLDivElement>(null);
-  const atBottom = useRef(true);
-  const [away, setAway] = useState(false);
-  const live = hasRun && summary?.status !== "finished";
-
-  const onScroll = () => {
-    const el = scroller.current;
-    if (!el) return;
-    const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 32;
-    atBottom.current = bottom;
-    setAway((prev) => (prev === !bottom ? prev : !bottom));
-  };
-
-  // A different run opens at the top, a live run follows the newest event only while the user is at the bottom.
-  const firstEvent = events[0]?.seq;
-  useEffect(() => {
-    atBottom.current = true;
-    setAway(false);
-    if (scroller.current) scroller.current.scrollTop = 0;
-  }, [firstEvent, hasRun]);
-
-  useLayoutEffect(() => {
-    const el = scroller.current;
-    if (el && live && atBottom.current) el.scrollTop = el.scrollHeight;
-  }, [items.length, live]);
-
-  const jump = () => {
-    const el = scroller.current;
-    if (el) el.scrollTo({ top: el.scrollHeight });
-    atBottom.current = true;
-    setAway(false);
-  };
-
+export function Trace({ hasRun, runId, events, summary, connection, onReconnect }: Props) {
+  const live = hasRun && summary?.status !== "finished" && !events.some((e) => e.type === "run_finished");
   return (
     <section className="trace" aria-labelledby="trace-h">
       <div className="section-head">
@@ -420,29 +440,10 @@ export function Trace({ hasRun, events, summary, connection, onReconnect }: Prop
         <Empty>
           <span>The agent's reads, calls and decision appear here as they happen.</span>
         </Empty>
+      ) : events.length === 0 ? (
+        <p className="trace-foot">{connection === "lost" ? "The trace could not be loaded." : "Waiting for the first event."}</p>
       ) : (
-        <div className="trace-scroll" ref={scroller} onScroll={onScroll} tabIndex={0} role="region" aria-label="Trace of the run">
-          {items.length === 0 ? (
-            <p className="trace-foot">{connection === "lost" ? "The trace could not be loaded." : "Waiting for the first event."}</p>
-          ) : (
-            <div className="trace-list">
-              {items.map((item) => (
-                <Row key={item.key} item={item} />
-              ))}
-            </div>
-          )}
-          {live && items.length > 0 && (
-            <p className="trace-foot">
-              <span className="pulse" aria-hidden="true" />
-              The agent is working. This view follows the latest step.
-            </p>
-          )}
-          {live && away && (
-            <div className="jump">
-              <button type="button" className="btn sm" onClick={jump}>Jump to latest</button>
-            </div>
-          )}
-        </div>
+        <TraceView key={runId} events={events} live={live} />
       )}
     </section>
   );

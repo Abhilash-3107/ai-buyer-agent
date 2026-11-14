@@ -19,17 +19,21 @@ interface Props {
 
 export function Outcome({ scenario, summary, hasRun, runId, sku, onChanged }: Props) {
   const running = hasRun && summary?.status !== "finished";
-  // The queue leads the column for as long as the run has any approval (the buyer's most frequent job), so a decision made there
+  // The queue leads the left column for as long as the run has any approval (the buyer's most frequent job), so a decision made there
   // does not make the card jump away from under the buyer's pointer.
   const approvals = (summary?.escalations ?? []).filter((e) => e.kind === "APPROVAL");
   const queue = <Queue summary={summary} hasRun={hasRun} runId={runId} onChanged={onChanged} key="queue" />;
   return (
-    <div className="col outcome">
-      {approvals.length > 0 && queue}
-      <DecisionCard scenario={scenario} summary={summary} hasRun={hasRun} running={running} />
-      <PoTable summary={summary} hasRun={hasRun} sku={sku} />
-      <Checks summary={summary} hasRun={hasRun} running={running} />
-      {approvals.length === 0 && queue}
+    <div className="outcome-grid">
+      <div className="col">
+        {approvals.length > 0 && queue}
+        <DecisionCard scenario={scenario} summary={summary} hasRun={hasRun} running={running} />
+        <Checks summary={summary} hasRun={hasRun} running={running} />
+      </div>
+      <div className="col">
+        <PoTable summary={summary} hasRun={hasRun} sku={sku} />
+        {approvals.length === 0 && queue}
+      </div>
     </div>
   );
 }
