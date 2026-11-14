@@ -8,7 +8,12 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from ..purchasing.calculations import demand_stats, inbound_arrivals, project_stock
+from ..purchasing.calculations import (
+    demand_stats,
+    inbound_arrivals,
+    project_stock,
+    round_order_qty,
+)
 from ..purchasing.context import load_sku_context
 from ..purchasing.types import (
     AGENT_ESCALATION_KINDS,
@@ -16,6 +21,7 @@ from ..purchasing.types import (
     PoStatus,
     Run,
     Severity,
+    SkuContext,
 )
 from ..purchasing.validator import validate_purchase
 from ..scenarios.types import Decision
@@ -84,6 +90,20 @@ def escalated(conn: sqlite3.Connection, run: Run, kind: str | None = None, po_id
     return conn.execute(sql, params).fetchone() is not None
 
 
+# Escalations that explain a projected stockout: problems buying cannot fix right now (D65). A BUDGET_INCREASE does
+# too, but only once the budget is spent (see _budget_left_for_an_order).
+STOCKOUT_EXCUSES = ("INVESTIGATION", "SUPPLIER_ISSUE", "OTHER")
+
+
+def _budget_left_for_an_order(ctx: SkuContext) -> tuple[str, int] | tuple[()]:
+    """The cheapest minimum order an approved supplier offers that the remaining budget still pays for, as
+    (supplier, units), or () if none fits. A request for more budget explains a gap only once nothing fits:
+    asking for more is not a reason to leave the budget you have unspent while the shelf runs empty."""
+    fits = [(o.unit_cost * qty, o.supplier_id, qty) for o in ctx.offers if o.is_approved
+            for qty in [round_order_qty(1, ctx.case_pack, o.moq)] if o.unit_cost * qty <= ctx.budget_remaining]
+    return min(fits)[1:] if fits else ()
+
+
 def verify(conn: sqlite3.Connection, run: Run, decision: SubmitDecisionArgs | None) -> VerificationResult:
     findings: list[Finding] = []
     touched = touched_pos(conn, run)
@@ -131,20 +151,27 @@ def verify(conn: sqlite3.Connection, run: Run, decision: SubmitDecisionArgs | No
 
     ctx = load_sku_context(conn, run.node_id, run.sku)
     demand = decision.daily_demand_used or demand_stats(ctx).forecast_daily  # no stated demand: the forecast mean
-    if demand > 0 and not escalated(conn, run):
+    if demand > 0 and not any(escalated(conn, run, kind=k) for k in STOCKOUT_EXCUSES):
         primary = next((o for o in ctx.offers if o.is_primary), None)
         horizon = (primary.lead_time_days if primary else 0) + ctx.review_period_days
         stockout = project_stock(ctx.on_hand, demand, inbound_arrivals(ctx)).stockout_day
-        if stockout is not None and stockout < horizon:
-            findings.append(Finding(
-                "STOCKOUT_UNRESOLVED",
-                f"At {demand:g} units/day the stock runs out on day {stockout}, before the next review "
-                f"(day {horizon}), and no escalation was raised.", {"stockout_day": stockout, "horizon": horizon}))
+        unspent = _budget_left_for_an_order(ctx) if escalated(conn, run, kind="BUDGET_INCREASE") else None
+        if stockout is not None and stockout < horizon and unspent != ():
+            where = f"At {demand:g} units/day the stock runs out on day {stockout}, before the next review (day {horizon})"
+            if unspent is None:
+                message = f"{where}, and no escalation was raised."
+            else:
+                supplier_id, qty = unspent
+                message = (f"{where}. A BUDGET_INCREASE escalation is open, but it does not explain the gap while "
+                           f"${ctx.budget_remaining:,.2f} of the budget is still unspent: enough for a minimum order "
+                           f"of {qty} units from {supplier_id}.")
+            findings.append(Finding("STOCKOUT_UNRESOLVED", message, {"stockout_day": stockout, "horizon": horizon}))
 
     if decision.decision == Decision.MODIFY and not touched and not _cancelled(conn, run):
         findings.append(Finding("DECISION_ACTION_MISMATCH",
-                                "The decision is MODIFY but no PO was created, resized or cancelled. MODIFY means "
-                                "you changed purchasing; if you only escalated, pick the label that matches.",
+                                "The decision is MODIFY but no PO was created, resized or cancelled. An escalation "
+                                "on its own does not change purchasing, so it is not a MODIFY; the submit_decision "
+                                "field description defines each label.",
                                 {"decision": decision.decision}))
     if decision.decision in (Decision.REJECT, Decision.INVESTIGATE) and units > 0:
         findings.append(Finding("DECISION_ACTION_MISMATCH",

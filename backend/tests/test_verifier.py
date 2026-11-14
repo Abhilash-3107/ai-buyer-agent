@@ -78,10 +78,31 @@ def test_a_po_placed_before_the_short_one_is_not_a_top_up():
 
 def test_modify_without_any_po_change_is_a_mismatch():
     """Seen live: the agent only escalated, then relabelled INVESTIGATE as MODIFY to pass."""
+    run, conn = new_run("S2-ACCEPT-SHORT", in_memory=True)  # stock covers demand, so only the label is wrong
+    actions.escalate(conn, run, "SUPPLIER_ISSUE", "Metro is short", {})
+    assert codes(conn, run, decision("MODIFY", 0)) == ["DECISION_ACTION_MISMATCH"]
+    assert verify(conn, run, decision("ACCEPT", 0)).passed
+
+
+def test_a_budget_escalation_does_not_excuse_leaving_the_budget_unspent():
+    """Seen live (D65): the agent asked for more budget, bought nothing and relabelled to REJECT, and passed,
+    although stock runs out the day an order placed now would arrive and $2,400 of budget was left."""
     run, conn = new_run("S4-BUDGET", in_memory=True)
     actions.escalate(conn, run, "BUDGET_INCREASE", "need 576, budget fits 396", {})
-    assert codes(conn, run, decision("MODIFY", 0, demand=60.0)) == ["DECISION_ACTION_MISMATCH"]
-    assert verify(conn, run, decision("REJECT", 0, demand=60.0)).passed
+    found = verify(conn, run, decision("REJECT", 0, demand=60.0)).findings
+    assert [f.code for f in found] == ["STOCKOUT_UNRESOLVED"]
+    assert "$2,400.00 of the budget is still unspent" in found[0].message and "120 units from SUP-METRO" in found[0].message
+    assert codes(conn, run, decision("MODIFY", 0, demand=60.0)) == ["STOCKOUT_UNRESOLVED", "DECISION_ACTION_MISMATCH"]
+
+    assert actions.create_po(conn, run, "SKU-4001", M, 120, 60, "a token buy").ok  # $1,680 left: still unspent
+    assert codes(conn, run, decision("MODIFY", 120, demand=60.0)) == ["STOCKOUT_UNRESOLVED"]
+
+
+def test_a_budget_escalation_explains_the_gap_once_the_budget_is_spent():
+    run, conn = new_run("S4-BUDGET", in_memory=True)
+    assert actions.create_po(conn, run, "SKU-4001", M, 396, 60, "all the budget allows").status == "PENDING_APPROVAL"
+    actions.escalate(conn, run, "BUDGET_INCREASE", "need 576, budget fits 396", {})
+    assert verify(conn, run, decision("MODIFY", 396, demand=60.0)).passed
 
 
 def test_stockout_unresolved_unless_escalated():
